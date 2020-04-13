@@ -17,7 +17,11 @@ class TransactionExtractor():
         # Column(s) to parse the datetime column from.  Passed to pandas.read_csv
         self.parse_dates_from = [self.column_datetime]
 
+    def get_dataframe(self, deep=True):
+        return self.df.copy(deep=deep)
+
     def get_transactions(self):
+        print("WARNING: This should be moved to a service taking pandas->transaction")
         return [self._row_dict_to_transaction(row_dict) for row_dict in self.df.to_dict("records")]
 
     def populate_from_csv(self, filename):
