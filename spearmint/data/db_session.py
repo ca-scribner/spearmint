@@ -1,18 +1,18 @@
 import sqlalchemy as sa
 import sqlalchemy.orm
 
-from quick_redraw.data.modelbase import SqlAlchemyBase
+from spearmint.data.modelbase import SqlAlchemyBase
 
 # Shared factory
 __factory = None
 
 
-def global_init(db_path: str, echo: bool = True):
+def global_init(db_path: str = "", echo: bool = True):
     """
     Initializes a single shared factory for all db access in this app
 
     Args:
-        db_path (str): Path to the db file
+        db_path (str): Path to the db file (empty string will store in memory)
         echo (bool): If True, engine will echo all db calls
 
     Returns:

@@ -54,8 +54,8 @@ class TransactionExtractor():
         self.df = pd.DataFrame(data)
 
     @classmethod
-    def read_csv(cls, source_file):
-        te = cls()
+    def read_csv(cls, source_file, *args, **kwargs):
+        te = cls(*args, **kwargs)
         te.populate_from_csv(source_file)
         return te
 
