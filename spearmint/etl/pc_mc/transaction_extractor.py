@@ -7,10 +7,10 @@ class PcMcTransactionExtractor(TransactionExtractor):
         super().__init__(*args, **kwargs)
         self.account_name = account_name
 
-        self.parse_dates_from = {self.column_datetime: ["Date", "Time"]}
+        self.parse_dates_from = {self.name_map["datetime"]: ["Date", "Time"]}
 
-    def get_amount(self, row_dict):
-        return -row_dict[self.column_amount]
+    def _get_raw_amount(self):
+        return -self.df_raw[self.name_map["amount"]]
 
-    def get_account_name(self, row_dict):
+    def _get_raw_account_name(self):
         return self.account_name

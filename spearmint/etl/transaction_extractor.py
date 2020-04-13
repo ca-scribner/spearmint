@@ -3,31 +3,46 @@ import pandas as pd
 from spearmint.data.transaction import Transaction
 
 
+COLUMN_NAME_MAP = {
+    "amount": "Amount",
+    "datetime": "Datetime",
+    "description": "Description",
+    "account_name": "Account Name",
+    "filename": "Source File",
+}
+
+
 class TransactionExtractor():
 
     def __init__(self):
         self.df = None
         self.filename = None
 
-        self.column_amount = "Amount"
-        self.column_datetime = "Datetime"
-        self.column_description = "Description"
-        self.column_account_name = "Account Name"
+        # Column names used for output parsed dataframe (self.df)
+        self.name_map = COLUMN_NAME_MAP
 
         # Column(s) to parse the datetime column from.  Passed to pandas.read_csv
-        self.parse_dates_from = [self.column_datetime]
+        # Can be overridden in subclasses
+        self.parse_dates_from = [self.name_map["datetime"]]
 
     def get_dataframe(self, deep=True):
         return self.df.copy(deep=deep)
 
-    def get_transactions(self):
-        print("WARNING: This should be moved to a service taking pandas->transaction")
-        return [self._row_dict_to_transaction(row_dict) for row_dict in self.df.to_dict("records")]
-
     def populate_from_csv(self, filename):
         self.filename = filename
-        self.df = pd.read_csv(filename, parse_dates=self.parse_dates_from)
+        self.df_raw = pd.read_csv(filename, parse_dates=self.parse_dates_from)
+        self._parse_raw_df()
 
+    def _parse_raw_df(self):
+        data = {
+            self.name_map["amount"]: self._get_raw_amount(),
+            self.name_map["description"]: self._get_raw_description(),
+            self.name_map["datetime"]: self._get_raw_datetime(),
+            self.name_map["account_name"]: self._get_raw_account_name(),
+            self.name_map["filename"]: self._get_raw_filename(),
+        }
+
+        self.df = pd.DataFrame(data)
 
     @classmethod
     def read_csv(cls, filename):
@@ -35,24 +50,19 @@ class TransactionExtractor():
         te.populate_from_csv(filename)
         return te
 
-    def get_amount(self, row_dict):
-        return row_dict[self.column_amount]
+    # Internal methods for getting data from a raw file.  Meant to be overridden by subclasses to implement custom
+    # parsing behaviour
+    def _get_raw_amount(self):
+        return self.df_raw[self.name_map["amount"]]
 
-    def get_description(self, row_dict):
-        return row_dict[self.column_description]
+    def _get_raw_description(self):
+        return self.df_raw[self.name_map["description"]]
 
-    def get_datetime(self, row_dict):
-        return row_dict[self.column_datetime]
+    def _get_raw_datetime(self):
+        return self.df_raw[self.name_map["datetime"]]
 
-    def get_account_name(self, row_dict):
-        return row_dict[self.column_account_name]
+    def _get_raw_account_name(self):
+        return self.df_raw[self.name_map["account_name"]]
 
-    def _row_dict_to_transaction(self, row_dict):
-        transaction = Transaction(
-            datetime=self.get_datetime(row_dict),
-            description=self.get_description(row_dict),
-            amount=self.get_amount(row_dict),
-            account_name=self.get_account_name(row_dict),
-            source_file=self.filename,
-        )
-        return transaction
+    def _get_raw_filename(self):
+        return self.filename
