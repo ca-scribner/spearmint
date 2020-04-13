@@ -13,5 +13,6 @@ def _row_dict_to_transaction(row_dict, column_name_map):
         amount=row_dict[column_name_map["amount"]],
         account_name=row_dict[column_name_map["account_name"]],
         source_file=row_dict[column_name_map["source_file"]],
+        category=row_dict[column_name_map["category"]],
     )
     return transaction

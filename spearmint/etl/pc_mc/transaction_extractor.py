@@ -14,3 +14,6 @@ class PcMcTransactionExtractor(TransactionExtractor):
 
     def _get_raw_account_name(self):
         return self.account_name
+
+    def _get_raw_category(self):
+        return None

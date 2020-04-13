@@ -8,6 +8,7 @@ PARSED_NAME_MAP = {
     "description": "Description",
     "account_name": "Account Name",
     "source_file": "Source File",
+    "category": "Category"
 }
 
 RAW_NAME_MAP = dict(PARSED_NAME_MAP)
@@ -38,12 +39,16 @@ class TransactionExtractor():
         self._parse_raw_df()
 
     def _parse_raw_df(self):
+        # Could replace API with something that tries for a _get_raw_X() and if does not exists, does a standard
+        # look-at-raw-column.  Would make this a for loop instead of explicit calls.  But feels opaque and hard for
+        # others to interpret.
         data = {
             self.parsed_name_map["amount"]: self._get_raw_amount(),
             self.parsed_name_map["description"]: self._get_raw_description(),
             self.parsed_name_map["datetime"]: self._get_raw_datetime(),
             self.parsed_name_map["account_name"]: self._get_raw_account_name(),
             self.parsed_name_map["source_file"]: self._get_raw_source_file(),
+            self.parsed_name_map["category"]: self._get_raw_category(),
         }
 
         self.df = pd.DataFrame(data)
@@ -72,3 +77,6 @@ class TransactionExtractor():
 
     def _get_raw_source_file(self):
         return os.path.basename(self.source_file)
+
+    def _get_raw_category(self):
+        return self.df_raw[self.raw_name_map["category"]]

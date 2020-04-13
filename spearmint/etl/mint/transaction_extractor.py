@@ -9,7 +9,6 @@ class MintTransactionExtractor(TransactionExtractor):
     def _get_raw_amount(self):
         """
         Mint files have +ve values for all amounts and a debit/credit column to denote sign for amount.
-        :return:
         """
         temp_amount = self.df_raw["Amount"].copy()
         temp_amount.loc[self.df_raw["Transaction Type"] == 'debit'] = \
