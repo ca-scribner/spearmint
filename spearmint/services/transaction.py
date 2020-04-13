@@ -1,3 +1,5 @@
+from typing import List
+
 import click
 
 from spearmint.data.db_session import create_session, global_init
@@ -31,6 +33,28 @@ def add_transactions_from_dataframe(df):
     s.add_all(transactions)
     s.commit()
     s.close()
+
+
+def find_transactions_without_category() -> List[Transaction]:
+    s = create_session()
+    # transactions = s.query(Transaction).all()
+    transactions = s.query(Transaction).filter(Transaction.category.is_(None)).all()
+    s.close()
+    return transactions
+
+
+def find_transaction_by_id(transaction_id) -> Transaction:
+    s = create_session()
+    trx = s.query(Transaction).filter(Transaction.id == transaction_id).first()
+    s.close()
+    return trx
+
+
+def find_all_transactions() -> List[Transaction]:
+    s = create_session()
+    trxs = s.query(Transaction).all()
+    s.close()
+    return trxs
 
 
 @click.group()
@@ -79,7 +103,6 @@ def import_csv_as_df(csv_file, csv_flavor, account_name=None):
     else:
         raise ValueError(f"Unknown csv_flavor '{csv_flavor}'")
     return te.to_dataframe(deep=True)
-
 
 
 if __name__ == '__main__':
