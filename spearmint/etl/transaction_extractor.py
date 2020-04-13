@@ -1,15 +1,16 @@
 import pandas as pd
+import os
 
-from spearmint.data.transaction import Transaction
 
-
-COLUMN_NAME_MAP = {
+PARSED_NAME_MAP = {
     "amount": "Amount",
     "datetime": "Datetime",
     "description": "Description",
     "account_name": "Account Name",
     "source_file": "Source File",
 }
+
+RAW_NAME_MAP = dict(PARSED_NAME_MAP)
 
 
 class TransactionExtractor():
@@ -19,13 +20,16 @@ class TransactionExtractor():
         self.source_file = None
 
         # Column names used for output parsed dataframe (self.df)
-        self.name_map = COLUMN_NAME_MAP
+        # Without dict(), would these be references to the mutable global, effectively making them class variables that
+        # can not be edited locally?  I think so?
+        self.parsed_name_map = dict(PARSED_NAME_MAP)
+        self.raw_name_map = dict(RAW_NAME_MAP)
 
         # Column(s) to parse the datetime column from.  Passed to pandas.read_csv
         # Can be overridden in subclasses
-        self.parse_dates_from = [self.name_map["datetime"]]
+        self.parse_dates_from = [self.parsed_name_map["datetime"]]
 
-    def get_dataframe(self, deep=True):
+    def to_dataframe(self, deep=True):
         return self.df.copy(deep=deep)
 
     def populate_from_csv(self, source_file):
@@ -35,11 +39,11 @@ class TransactionExtractor():
 
     def _parse_raw_df(self):
         data = {
-            self.name_map["amount"]: self._get_raw_amount(),
-            self.name_map["description"]: self._get_raw_description(),
-            self.name_map["datetime"]: self._get_raw_datetime(),
-            self.name_map["account_name"]: self._get_raw_account_name(),
-            self.name_map["source_file"]: self._get_raw_source_file(),
+            self.parsed_name_map["amount"]: self._get_raw_amount(),
+            self.parsed_name_map["description"]: self._get_raw_description(),
+            self.parsed_name_map["datetime"]: self._get_raw_datetime(),
+            self.parsed_name_map["account_name"]: self._get_raw_account_name(),
+            self.parsed_name_map["source_file"]: self._get_raw_source_file(),
         }
 
         self.df = pd.DataFrame(data)
@@ -52,17 +56,19 @@ class TransactionExtractor():
 
     # Internal methods for getting data from a raw file.  Meant to be overridden by subclasses to implement custom
     # parsing behaviour
+    # Must return data series with the requested data
+    # TODO: docstrings
     def _get_raw_amount(self):
-        return self.df_raw[self.name_map["amount"]]
+        return self.df_raw[self.raw_name_map["amount"]]
 
     def _get_raw_description(self):
-        return self.df_raw[self.name_map["description"]]
+        return self.df_raw[self.raw_name_map["description"]]
 
     def _get_raw_datetime(self):
-        return self.df_raw[self.name_map["datetime"]]
+        return self.df_raw[self.raw_name_map["datetime"]]
 
     def _get_raw_account_name(self):
-        return self.df_raw[self.name_map["account_name"]]
+        return self.df_raw[self.raw_name_map["account_name"]]
 
     def _get_raw_source_file(self):
-        return self.source_file
+        return os.path.basename(self.source_file)

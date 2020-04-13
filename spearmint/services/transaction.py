@@ -1,8 +1,8 @@
 from spearmint.data.transaction import Transaction
-from spearmint.etl.transaction_extractor import COLUMN_NAME_MAP
+from spearmint.etl.transaction_extractor import PARSED_NAME_MAP
 
 
-def dataframe_to_transactions(df, column_name_map=COLUMN_NAME_MAP):
+def dataframe_to_transactions(df, column_name_map=PARSED_NAME_MAP):
     return [_row_dict_to_transaction(row_dict, column_name_map) for row_dict in df.to_dict("records")]
 
 
