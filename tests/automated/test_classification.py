@@ -4,7 +4,7 @@ import tempfile
 
 from spearmint.data.db_session import global_init, global_forget, create_session
 from spearmint.data.transaction import Transaction
-from spearmint.services.classification import classify_by_lookup
+from spearmint.services.classification import classify_db_by_lookup
 from spearmint.services.transaction import find_transactions_without_category
 
 
@@ -56,7 +56,7 @@ def test_lookup_classifier(db_with_unclassified, create_label_file):
     trxs = find_transactions_without_category()
     assert len(trxs) == 3
 
-    classify_by_lookup(create_label_file)
+    classify_db_by_lookup(create_label_file)
 
     trxs = find_transactions_without_category()
     assert len(trxs) == 1

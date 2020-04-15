@@ -76,8 +76,8 @@ def add(db_path, csv_file, csv_flavor, account_name):
     Add transactions to a database from a csv file, creating the database if required
 
     Args: \n
-        db_path (str): String path to the database to add transactions to \n
-        csv_file (str): String path to the csv file to load and extract transactions from\n
+        db_path (str): Path to the database to add transactions to \n
+        csv_file (str): Path to the csv file to load and extract transactions from\n
         csv_flavor (str): One of:\n
             mint: Mint-formatted csv file\n
             pc_mc: PC Mastercard formatted csv file\n
@@ -96,9 +96,9 @@ cli.add_command(add)
 def import_csv_as_df(csv_file, csv_flavor, account_name=None):
     if csv_flavor == "pc_mc":
         te = PcMcTransactionExtractor.read_csv(csv_file, account_name=account_name)
-    elif csv_file == "mint":
+    elif csv_flavor == "mint":
         te = MintTransactionExtractor.read_csv(csv_file)
-    elif csv_file == "base":
+    elif csv_flavor == "base":
         te = TransactionExtractor.read_csv(csv_file)
     else:
         raise ValueError(f"Unknown csv_flavor '{csv_flavor}'")
