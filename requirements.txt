@@ -5,3 +5,4 @@ matplotlib
 sqlalchemy
 Click
 pytest
+dash
