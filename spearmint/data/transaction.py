@@ -6,6 +6,7 @@ from spearmint.data.big_integer_type import BigIntegerType
 
 
 class Transaction(SqlAlchemyBase):
+    # TODO: Enforce types.  I think I had a pattern from this in the pypi?
     __tablename__ = "transaction"
 
     id: int = sa.Column(BigIntegerType, primary_key=True, autoincrement=True)

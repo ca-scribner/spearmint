@@ -1,6 +1,7 @@
 from typing import List
-
+import pandas as pd
 import click
+from sqlalchemy import inspect, distinct
 
 from spearmint.data.db_session import create_session, global_init
 from spearmint.data.transaction import Transaction
@@ -35,7 +36,7 @@ def add_transactions_from_dataframe(df):
     s.close()
 
 
-def find_transactions_without_category() -> List[Transaction]:
+def get_transactions_without_category() -> List[Transaction]:
     s = create_session()
     # transactions = s.query(Transaction).all()
     transactions = s.query(Transaction).filter(Transaction.category.is_(None)).all()
@@ -43,18 +44,75 @@ def find_transactions_without_category() -> List[Transaction]:
     return transactions
 
 
-def find_transaction_by_id(transaction_id) -> Transaction:
+def get_transaction_by_id(transaction_id) -> Transaction:
     s = create_session()
     trx = s.query(Transaction).filter(Transaction.id == transaction_id).first()
     s.close()
     return trx
 
 
-def find_all_transactions() -> List[Transaction]:
+# Can I set output type dynamically using type of the Transaction.category property?
+def get_transaction_categories() -> List[str]:
+    """
+    Returns list of all unique, valid categories in the transaction table
+    """
+    s = create_session()
+    categories = s.query(Transaction.category).distinct()
+    # The query returns a tuple per record.  Flatten
+    categories = [tup[0] for tup in categories]
+    s.close()
+    return categories
+
+
+def get_all_transactions(return_type='list') -> List[Transaction]:
+    """
+    Returns all transactions as specified type
+
+    Args:
+        return_type (str): One of:
+                            list: returns as [Transaction]
+                            df: returns as pd.DataFrame with one row per transaction and all attributes as columns
+
+    Returns:
+        See return_type
+    """
     s = create_session()
     trxs = s.query(Transaction).all()
     s.close()
+
+    # Should test this first, but lazy...
+    if return_type == 'list':
+        pass
+    elif return_type == 'df':
+        trxs = transactions_to_dataframe(trxs)
+    else:
+        raise ValueError(f"Invalid return_type {return_type}")
     return trxs
+
+
+def transactions_to_dataframe(transactions: List[Transaction]) -> pd.DataFrame:
+    trxs_as_dicts = [sa_obj_as_dict(trx) for trx in transactions]
+    df = pd.DataFrame(trxs_as_dicts)
+    return df
+
+
+# Helpers
+def sa_obj_as_dict(sa_obj):
+    """
+    Converts a SqlAlchemy object (eg: a row of a table from SqlAlchemy) to a dict
+
+    From https://stackoverflow.com/a/37350445/5394584
+
+    Args:
+        sa_obj: SqlAlchemy object
+
+    Returns:
+        (dict)
+    """
+    return {c.key: getattr(sa_obj, c.key)
+            for c in inspect(sa_obj).mapper.column_attrs}
+
+
 
 
 @click.group()

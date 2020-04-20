@@ -5,7 +5,7 @@ import tempfile
 from spearmint.data.db_session import global_init, global_forget, create_session
 from spearmint.data.transaction import Transaction
 from spearmint.services.classification import classify_db_by_lookup
-from spearmint.services.transaction import find_transactions_without_category
+from spearmint.services.transaction import get_transactions_without_category
 
 
 @pytest.fixture
@@ -53,12 +53,12 @@ def test_lookup_classifier(db_with_unclassified, create_label_file):
 
     # Check before just to make sure we have 3/4 uncategorized
     s = create_session()
-    trxs = find_transactions_without_category()
+    trxs = get_transactions_without_category()
     assert len(trxs) == 3
 
     classify_db_by_lookup(create_label_file)
 
-    trxs = find_transactions_without_category()
+    trxs = get_transactions_without_category()
     assert len(trxs) == 1
 
     # Spot check we didnt overwrite
