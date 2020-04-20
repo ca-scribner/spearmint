@@ -15,18 +15,10 @@ global_init("../../tests/manual/test.sqlite", echo=False)
 
 MOVING_AVERAGE_SLIDER_TICKS = [1, 2, 3, 6, 12]
 
-DATA = [
-    ("2019-01-05 12:24:02", 15),
-    ("2019-01-12 12:24:02", 20),
-    ("2019-02-05 12:24:02", 12),
-    ("2019-03-05 12:24:02", 10),
-]
-DATA = pd.DataFrame(DATA, columns=['x', 'y'])
-DATA['x'] = pd.to_datetime(DATA['x'])
-
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 
 app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
+
 
 def monthly_bar(df, date_column='datetime', y_column='amount', budget=None, moving_average_window=None,
                 start_date=None, end_date=None, fig=None, plot_burn_rate=False):
@@ -156,7 +148,7 @@ app.layout = html.Div(
             end_date=pd.to_datetime("2020-09-01"),
             # min_date_allowed=pd.to_datetime("2019-01-01"),
             # max_date_allowed=pd.to_datetime("2020-01-01"),  # Could set to real data range
-            display_format="YYYY MMM DD",
+            display_format="YYYY-MMM-DD",
 
         ),
         html.Hr(),
@@ -171,14 +163,6 @@ app.layout = html.Div(
             labelStyle={"display": "inline-block"}
         ),
         html.Hr(),
-        # dcc.Slider(
-        #     id="monthly-hist-ma-slider",
-        #     min=1,
-        #     max=12,
-        #     step=None,
-        #     marks={1: 1, 2: 2, 3: 3, 6: 6, 12: 12},
-        #     value=3,
-        # ),
         dcc.Slider(
             id="monthly-hist-ma-slider",
             min=1,
@@ -190,34 +174,11 @@ app.layout = html.Div(
         html.Hr(),
         dcc.Graph(
             id='my-graph',
-            # figure= \
-            #         bar_with_ma(data, 'x', 'y', budget=4, ma=2)
-            #     {
-            #     'data': [
-            #         {'x': data['x'], 'y': data['y'], 'type': 'bar', 'name': 'my data'},
-            #         {'x': data['x'], 'y': data['y']+2, 'type': 'bar', 'name': 'my data + 2'},
-            #         {'x': data['x'], 'y': data['y'], 'type': 'scatter', 'name': 'my data as scatter'},
-            #         dict(type="line", xref="paper", x0=0, x1=1, yref="y", y0=13, y1=13, name="my line"),  # WHY DOESNT THIS SHOW ON SCREEN?
-            #         dict(type="line", xref="x", x0=0, x1=5, yref="y", y0=13, y1=5, name="my other line"),
-            #         dict(type="scatter", x=[1, 3], y=[5, 15], name="scatter by dict"),
-            #         dict(type="line",
-            #              xref="x",
-            #              yref="y",
-            #              x0=0,
-            #              y0=0,
-            #              x1=0.5,
-            #              y1=0.5,
-            #              name="line from interwebs"
-            #              )
-            #     ],
-            #     'layout': {
-            #         'title': "Figure title",
-            #     }
-            # }
         ),
         html.Button("Pull data from db", id="refresh-data-button", n_clicks=0),
     ]
 )
+
 
 @app.callback(Output("monthly-hist-radio", "options"),
               [Input("refresh-data-button", "n_clicks")]
@@ -251,7 +212,6 @@ def update_figure_using_button(n_clicks, category, start_date, end_date, ma, plo
                       end_date=end_date,
                       plot_burn_rate=plot_burn_rate,
                       )
-    # fig = monthly_bar_old(df_grouped, 'datetime', 'amount', moving_average_window=ma)
     return fig
 
 
@@ -269,8 +229,6 @@ def _date_shift(ds, scale_factor=0.8):
     # Compute the date relative to a month start
     relative_date = (ds - month_begin) * scale_factor
     return relative_date + reference_start
-
-
 
 
 if __name__ == '__main__':
