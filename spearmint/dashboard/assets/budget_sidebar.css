@@ -1,0 +1,10 @@
+.checked { color: green }
+
+.controls-sidebar {
+    font-size: 8px;
+    color: red;
+}
+
+.controls-sidebar-base {
+    font-size: 12px;
+}
