@@ -41,7 +41,7 @@ def get_rounded_z_range_including_mid(values, zmid=0.0, round_to=10.0):
     If zmid<zmin (or zmid>zmax), zmin=zmid (zmax=zmid) so that zmid is always included.
 
     Args:
-        values (iterable):
+        values (iterable): Values to use to compute zmin/zmax.  Nan values will be ignored.
         zmid (float): Value to be included in the zmin to zmax range
         round_to (float): Multiple to which zmin/zmax value will be rounded to.  Ex, if zmin=-12 and round_to=5, zmin
                           will be rounded (floored) to -15.
@@ -49,10 +49,8 @@ def get_rounded_z_range_including_mid(values, zmid=0.0, round_to=10.0):
     Returns:
         zmin, zmax
     """
-    values = np.asarray(values)
-
-    zmin = float(min(zmid, values.min()))
-    zmax = float(max(zmid, values.max()))
+    zmin = float(min(zmid, np.nanmin(values)))
+    zmax = float(max(zmid, np.nanmax(values)))
 
     if round_to:
         zmin = floor_to(zmin, round_to)

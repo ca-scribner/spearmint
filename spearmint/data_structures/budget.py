@@ -1,3 +1,5 @@
+from typing import Union, Tuple, List
+
 DEFAULT_BUDGET_COLLECTION_NAME = "Unnamed Budget"
 
 # FUTURE: Put an ABC above Budget and BudgetCollection to enforce the commonalities in API?
@@ -53,7 +55,6 @@ class BudgetCollection:
 
         return categories
 
-
     def add_budget(self, b, raise_on_duplicate_categories=True):
         """
         Add a Budget to the collection, optionally raising if this budget overlaps an existing category
@@ -76,6 +77,82 @@ class BudgetCollection:
 
     def get_budgets(self):
         return self.budgets
+
+    def get_leaf_budgets(self):
+        """
+        Returns a list of the leaf budgets (budgets at the lowest level in this collection)
+        """
+        leaf_budgets = []
+        for b in self.get_budgets():
+            try:
+                leaf_budgets.extend(b.get_leaf_budgets())
+            except AttributeError:
+                # No deeper budgets
+                leaf_budgets.append(b)
+        return leaf_budgets
+
+    def slice_by_budgets(self, budgets: Union[Tuple, List] = tuple()):
+        """
+        Returns a new BudgetCollection that is a flat subset of the current BudgetCollection
+
+        Only budgets called out by name in the budgets iterable are included in the returned BC
+
+        Args:
+            budgets (Iterable): Iterable of string budget names to be included in the return.  Defaults to an empty
+                                tuple
+
+        Returns:
+            (BudgetCollection)
+        """
+        new_bc = BudgetCollection(self.name)
+        bs = [b for b in self.get_leaf_budgets() if b.name in budgets]
+        for b in bs:
+            new_bc.add_budget(b)
+        return new_bc
+
+    def flatten(self):
+        """
+        Returns a new BudgetCollection composed of all the leaf budgets in the current collection.
+
+        This BudgetCollection will cover the same categories as the original BudgetCollection, but will not have the
+        hierarchy
+        """
+        bc = BudgetCollection(self.name)
+        for b in self.get_leaf_budgets():
+            bc.add_budget(b)
+        return bc
+
+    def aggregate_categories_to_budget(self, categories):
+        """
+        Returns the budget name that corresponds to each category provided and None if a category is not in the BC.
+
+        If any element of categories is missing from the BudgetCollection's budget, it is returned as None
+
+        Args:
+            categories: List of category names to be aggregated into budget names.
+
+        Returns:
+            TODO
+            (list?)
+        """
+        category_to_budget = {}
+
+        for b in self.get_leaf_budgets():
+            for c in b.categories:
+                category_to_budget[c] = b.name
+
+        budgets = [category_to_budget.get(c, None) for c in categories]
+        return budgets
+        #
+        # # Find all the lowest budget:category mapping
+        # to_search = self.get_budgets()
+        # while to_search:
+        #     b = to_search.pop()
+        #     try:
+        #         to_search.extend(b.get_budgets())
+        #     except AttributeError:
+        #         budget_to_category[b] = b.categories
+
 
     def extend(self, bs):
         """
@@ -128,6 +205,14 @@ class BudgetCollection:
         """
         print(self.to_str(amount=amount, categories=categories))
 
+    def __eq__(self, other):
+        try:
+            return (self.name == other.name and
+                    self.budgets == other.budgets
+                    )
+        except:
+            return False
+
 
 class Budget:
     def __init__(self, amount, categories, name=None, amount_type="Monthly"):
@@ -164,6 +249,15 @@ class Budget:
         if categories:
             ret += f" | {str(self.categories)}"
         return ret
+
+    def __eq__(self, other):
+        try:
+            return ((self.categories == other.categories) and
+                    (self.amount == other.amount) and
+                    (self.name == other.name)
+                    )
+        except:
+            return False
 
     def __str__(self):
         """
