@@ -78,6 +78,42 @@ class BudgetCollection:
     def get_budgets(self):
         return self.budgets
 
+    def get_budget_by_name(self, name, recurse=True):
+        """
+        Returns the Budget or BudgetCollection named name in this BudgetCollection if it exists, else raises KeyError.
+
+        Optionally check for nested budgets.
+
+        Note that there is no checking in place to prevent multiple budgets of the same name.  This will return the
+        first budget of the requested name found according to:
+            -   checking all the direct children of this BudgetCollection in order they were added
+            -   (returse=True) depth-first search of the direct children of this BudgetCollection (search the first
+                completely beore checking the second, ...)
+
+        Args:
+            name (str): Name of budget to look for
+            recurse (bool): If true, search children BudgetCollections for this budget as well
+
+        Returns:
+            (Budget or None)
+        """
+        for b in self.get_budgets():
+            if b.name == name:
+                return b
+            else:
+                if recurse:
+                    try:
+                        # If successful, we can return what we get from recursion
+                        return b.get_budget_by_name(name, recurse)
+                    except (AttributeError, KeyError):
+                        # Otherwise, we continue looking elsewhere
+                        # AttributeError: This is a Budget not a BudgetCollection
+                        # KeyError: This BudgetCollection doesn't have what we want...
+                        pass
+
+        # If we get to the end, we found nothing
+        raise KeyError("Cannot find budget named '{name}'")
+
     def get_leaf_budgets(self):
         """
         Returns a list of the leaf budgets (budgets at the lowest level in this collection)
