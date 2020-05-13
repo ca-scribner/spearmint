@@ -2,6 +2,15 @@ from spearmint.data_structures.budget import BudgetCollection, Budget
 import pytest
 
 
+def sample_b():
+    categories = [f"c{i}" for i in range(5)]
+    amount = 20
+    b = Budget(amount, categories, name='test budget')
+    return {'b': b,
+            'categories': categories
+            }
+
+
 def sample_bc():
     n_budgets = 6
     n_leaves_per_budget = 2
@@ -104,3 +113,14 @@ def test_budget_collection_get_budget_by_name():
     # Test grabbing a Budget that does not exist from a BC by name
     with pytest.raises(KeyError):
         bc.get_budget_by_name("not a budget")
+
+
+def test_budget_aggregate_categories_to_budget():
+    sample = sample_b()
+    categories = sample['categories']
+    b = sample['b']
+
+    assert [b.name] * len(categories) == b.aggregate_categories_to_budget(categories)
+    assert [b.name] * len(categories) + [None, None] == b.aggregate_categories_to_budget(
+        categories + ["not a category", "also not a category"]
+    )

@@ -1,4 +1,6 @@
 import numpy as np
+import pandas as pd
+import datetime
 import math
 
 
@@ -86,3 +88,27 @@ def make_centered_rg_colorscale(v_min, v_max, v_mid=0, reverse=False):
     if reverse:
         colors.reverse()
     return list(zip(z, colors))
+
+
+def date_shift(ds, scale_factor=0.8):
+    """
+    Shifts/Scales the dates in a date Series
+
+    Adjusts dates in Series such that that months are shifted ~1/2 month back and dates in each month are scaled such
+    that each month has scale_factor "width" (eg for Jan, Jan 1 and Jan 31 are only scale_factor months apart, eg ~15
+    days if scale_factor = 5.
+
+    Original use for this was to take monthly data and temporally shift it to center around the start of each month
+    (eg: data from Apr 1 to Apr 30 is shifted to center around April 1) and then tighten each month (so April data
+    might occur between Mar 20 and April 10).  This was done to align data in a line graph with bars in a bargraph for
+    the same months
+    """
+    # Shift +1 second so that MonthBegin of the very first date in a month isn't pushed to the previous month
+    month_begin = ds + datetime.timedelta(1) + pd.offsets.MonthBegin(-1)
+    month_end = ds + pd.offsets.MonthEnd(0)
+
+    # Make a start date that is shifted half of a scaled month to the left of the beginning of this month
+    reference_start = -((month_end - month_begin) * scale_factor / 2) + month_begin
+    # Compute the date relative to a month start
+    relative_date = (ds - month_begin) * scale_factor
+    return relative_date + reference_start

@@ -174,8 +174,7 @@ class BudgetCollection:
         category_to_budget = {}
 
         for b in self.get_leaf_budgets():
-            for c in b.categories:
-                category_to_budget[c] = b.name
+            category_to_budget.update(b.category_to_budget)
 
         budgets = [category_to_budget.get(c, None) for c in categories]
         return budgets
@@ -262,6 +261,12 @@ class Budget:
                                 Yearly: X dollars per year (converted internally to monthly)
         """
         self.categories = categories
+
+        if name is None:
+            self.name = ", ".join(self.categories)
+        else:
+            self.name = name
+
         if amount_type == "Yearly":
             amount = amount / 12.0
         elif amount_type == "Monthly":
@@ -269,10 +274,8 @@ class Budget:
         else:
             raise ValueError("Invalid value for amount_type ('{0}')".format(amount_type))
         self.amount = amount
-        if name is None:
-            self.name = ", ".join(self.categories)
-        else:
-            self.name = name
+
+        self.category_to_budget = {c: self.name for c in self.categories}
 
     def to_str(self, amount=True, categories=True):
         """
@@ -285,6 +288,18 @@ class Budget:
         if categories:
             ret += f" | {str(self.categories)}"
         return ret
+
+    def aggregate_categories_to_budget(self, categories):
+        """
+        Remaps a list of categories, replacing categories in this budget with budget.name and others to None
+
+        Args:
+            categories (list): List of string category names
+
+        Returns:
+            (list): List of elements of (this) string budget name or None
+        """
+        return [self.category_to_budget.get(c, None) for c in categories]
 
     def __eq__(self, other):
         try:

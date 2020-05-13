@@ -1,6 +1,5 @@
 import argparse
-import datetime
-
+import json
 import pandas as pd
 import dash
 import dash_core_components as dcc
@@ -11,7 +10,7 @@ import plotly.graph_objects as go
 
 from spearmint.dashboard.budget_sidebar_elements import make_sidebar_ul
 from spearmint.dashboard.budget_sidebar_elements import register_sidebar_list_click, get_checked_sidebar_children
-from spearmint.dashboard.utils import get_rounded_z_range_including_mid, make_centered_rg_colorscale
+from spearmint.dashboard.utils import get_rounded_z_range_including_mid, make_centered_rg_colorscale, date_shift
 from spearmint.data.db_session import global_init
 from spearmint.data_structures.budget import BudgetCollection
 from spearmint.services.budget import get_expense_budget_collection
@@ -25,6 +24,10 @@ ANNOTATION_ARGS = dict(
     font=dict(color='black',),
 )
 
+CATEGORY_COLUMN = "category"
+DATETIME_COLUMN = "datetime"
+AMOUNT_COLUMN = "amount"
+
 external_stylesheets = [dbc.themes.BOOTSTRAP]
 
 app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
@@ -32,8 +35,8 @@ app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
 BUDGET_COLLECTION = get_expense_budget_collection()
 
 
-def budget_heatmap(df, datetime_column='datetime', category_column='category',
-                   amount_column='amount', budget=None, moving_average_window=None, start_date=None, end_date=None,
+def budget_heatmap(df, datetime_column=DATETIME_COLUMN, category_column=CATEGORY_COLUMN,
+                   amount_column=AMOUNT_COLUMN, budget=None, moving_average_window=None, start_date=None, end_date=None,
                    fig: go.Figure = None,
                    ):
     """
@@ -89,7 +92,7 @@ def budget_heatmap(df, datetime_column='datetime', category_column='category',
 
     # Rearrange df of individual transactions into format needed
     df_sums = df[['budget_name', datetime_column, amount_column]]\
-        .groupby(['budget_name', pd.Grouper(key='datetime', freq='MS')]).sum()
+        .groupby(['budget_name', pd.Grouper(key=datetime_column, freq='MS')]).sum()
 
     # Make a regular index with all category/month combinations having values.
     # Fill anything missing with 0
@@ -175,6 +178,125 @@ def budget_heatmap(df, datetime_column='datetime', category_column='category',
     return fig
 
 
+def monthly_bar(df, datetime_column=DATETIME_COLUMN, y_column=AMOUNT_COLUMN, budget=None, moving_average_window=None,
+                start_date=None, end_date=None, fig=None, plot_burn_rate=False):
+
+    if fig is None:
+        fig = go.Figure()
+
+    # Rearrange data into what we need
+    df_monthly = df.groupby(pd.Grouper(key=datetime_column, freq='MS')).sum()
+
+    if plot_burn_rate:
+        df_daily = df.groupby(pd.Grouper(key=datetime_column, freq='d')).sum()
+        # Get the cumulative daily sum, reset every month
+        # No key because groupby by default moved datetime to index, and Grouper uses index as default key
+        # Use .transform to return a series of the same shape as the input data so I can reincorporate into df_daily
+        # ...I think I could leave it out and it would work here because pd.Series.cumsum returns the same shape anyway,
+        # but this would also work for something like transform(pd.Series.sum)
+        df_daily['cumsum'] = df_daily.groupby(pd.Grouper(freq='MS'))[y_column].transform(pd.Series.cumsum)
+
+        # Make a column of the index for easier groupby
+        df_daily[datetime_column] = df_daily.index
+
+        # Make a datetime that is normalized/shifted to sit inside a bar chart bar
+        # (bars are plotted centered on their date)
+        df_daily[f'shifted_{datetime_column}'] = df_daily.groupby(pd.Grouper(freq="MS"))[datetime_column]\
+            .transform(date_shift)
+
+    # Plot bars monthly
+    bar_name = "Monthly"
+    if budget:
+        bar_name += f" (budget = ${budget})"
+    fig.add_trace(go.Bar(
+        x=df_monthly.index,
+        y=df_monthly[y_column],
+        name=bar_name,
+        hoverinfo="y",
+    ))
+    fig.update_xaxes(range=[start_date, end_date], dtick="M1")
+
+    if budget:
+        fig.add_shape(
+            type="line",
+            xref="paper",
+            x0=0,
+            x1=1,
+            yref='y',
+            y0=budget,
+            y1=budget,
+            line=dict(
+                dash="dot",
+                width=3,
+                color='cyan',
+            ),
+            name=f"Budget ({budget})",
+        )
+
+    if moving_average_window:
+        df_ma = (df_monthly[[y_column]]
+                 .rolling(moving_average_window)
+                 .mean()
+                 )
+        df_ma = df_ma.loc[df_ma[y_column].notna()]
+
+        if budget and len(df_ma) > 0:
+            # TODO: This hovertext would make more sense in the bar rather than on just the moving average dot
+            df_ma['delta'] = df_ma[y_column] - budget
+            df_ma['overunder'] = df_ma.apply(lambda row: "under" if row.loc['delta'] > 0 else "over", axis=1)
+            print(f"df_ma = {df_ma}")
+            hovertext = df_ma.apply(lambda row: f"${row.loc[y_column]:.2f} (${abs(row.loc['delta']):.2f} {row.loc['overunder']} budget)", axis=1)
+            print(f"hovertext (a)= {hovertext}")
+            hovertext = hovertext.to_list()
+
+            # hovertext = (df_ma[y_column] - budget).to_list(),
+            # hovertext = []
+            hoverinfo = "text"
+        else:
+            hoverinfo = "none",
+            hovertext = ""
+
+        def set_color(val):
+            if val > budget:
+                return "green"
+            else:
+                return "red"
+        print(f"colorlist = {list(map(set_color, df_ma[y_column]))}")
+        print(f"hovertext = {hovertext}")
+        fig.add_trace(go.Scatter(
+            x=df_ma.index,
+            y=df_ma[y_column],
+            line=dict(
+                # dash="dash",
+                color="grey",
+                width=3,
+            ),
+            marker=dict(
+                size=7,
+                color=list(map(set_color, df_ma[y_column]))
+            ),
+            name=f"{moving_average_window} Month Moving Average",
+            hoverinfo=hoverinfo,
+            hovertext=hovertext,
+        ))
+
+    if plot_burn_rate:
+        for name, df_daily_this_month in df_daily.groupby(pd.Grouper(freq='MS')):
+            fig.add_trace(go.Scatter(
+                # x=df_daily_this_month.index - datetime.timedelta(days=15),
+                x=df_daily_this_month[f'shifted_{datetime_column}'],
+                y=df_daily_this_month['cumsum'],
+                showlegend=False,
+                line=dict(
+                    dash="dot",
+                    color="black",
+                    width=2,
+                ),
+            ))
+
+    return fig
+
+
 def _make_annotations(df_sums):
     annotations = []
     for (datetime_, cat), ds in df_sums.iterrows():
@@ -208,8 +330,8 @@ def get_date_picker():
     # Wasn't sure how to make a date picker placeholder then update it later.  Maybe I can store it globally and change
     # its properties later?
     df = get_all_transactions('df')
-    start_date = df["datetime"].min()
-    end_date = df["datetime"].max()
+    start_date = df[DATETIME_COLUMN].min()
+    end_date = df[DATETIME_COLUMN].max()
 
     return dcc.DatePickerRange(
         id='monthly-hist-date-range',
@@ -261,10 +383,14 @@ def get_app_layout():
                             dbc.Col(
                                 children=[
                                     dcc.Graph(
-                                        id='main-graph',
+                                        id='heatmap-graph',
                                         # This should be set commonly with any other figures
-                                        style={'height': '80vh'},
+                                        style={'height': '60vh'},
                                     ),
+                                    dcc.Graph(
+                                        id='bar-graph',
+                                        style={'height': '40vh'},
+                                    )
                                 ],
                                 lg=9, md=8, xs=6,
                                 id="content-col",
@@ -274,11 +400,12 @@ def get_app_layout():
                 ],
                 fluid=True,
             ),
+            html.Div(id="tempdiv"),
         ]
     )
 
 
-@app.callback(Output("main-graph", "figure"),
+@app.callback(Output("heatmap-graph", "figure"),
               [Input('monthly-hist-date-range', "start_date"),
                Input('monthly-hist-date-range', "end_date"),
                Input("monthly-hist-ma-slider", "value"),
@@ -294,10 +421,10 @@ def update_figure(start_date, end_date, ma, sidebar_ul_children):
     bc_subset = BUDGET_COLLECTION.slice_by_budgets(budgets_to_show)
 
     fig = budget_heatmap(df,
-                         datetime_column='datetime',
-                         category_column='category',
+                         datetime_column=DATETIME_COLUMN,
+                         category_column=CATEGORY_COLUMN,
                          budget=bc_subset,
-                         amount_column='amount',
+                         amount_column=AMOUNT_COLUMN,
                          moving_average_window=ma,
                          start_date=start_date,
                          end_date=end_date,
@@ -311,6 +438,41 @@ app.callback(
     [Input({"type": "list_item", "id": ALL}, 'n_clicks'), ],
     [State("sidebar-ul", "children")]
 )(register_sidebar_list_click)
+
+
+# Bar chart callback
+@app.callback(
+    Output("bar-graph", "figure"),
+    [Input("heatmap-graph", "clickData"),
+     Input('monthly-hist-date-range', "start_date"),
+     Input('monthly-hist-date-range', "end_date"),
+     Input("monthly-hist-ma-slider", "value"),
+    ]
+)
+def update_barchart(clickData, start_date, end_date, moving_average_window):
+    if not clickData:
+        return go.Figure()
+
+    df = get_all_transactions('df').copy()
+
+    # budget_name is first point clicked's (click only returns one) y attribute
+    budget_name = clickData["points"][0]['y']
+    print(f"budget_name = {budget_name}")
+
+    # Filter down to only the budget_name we care about, aggregating categories to a budget if needed
+    budget = BUDGET_COLLECTION.get_budget_by_name(budget_name)
+    df['budget_name'] = budget.aggregate_categories_to_budget(df[CATEGORY_COLUMN])
+    df = df.loc[df['budget_name'] == budget_name]
+
+    return monthly_bar(df,
+                       datetime_column=DATETIME_COLUMN,
+                       y_column=AMOUNT_COLUMN,
+                       budget=budget.amount,
+                       moving_average_window=moving_average_window,
+                       start_date=start_date,
+                       end_date=end_date,
+                       plot_burn_rate=True
+                       )
 
 
 def parse_args():

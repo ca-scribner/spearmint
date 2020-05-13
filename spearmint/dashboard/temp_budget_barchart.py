@@ -10,6 +10,8 @@ import plotly.graph_objects as go
 from spearmint.data.db_session import global_init, create_session
 from spearmint.services.transaction import get_all_transactions, get_transaction_categories
 
+from spearmint.dashboard.utils import date_shift
+
 global_init("../../tests/manual/test.sqlite", echo=False)
 
 
@@ -43,7 +45,7 @@ def monthly_bar(df, date_column='datetime', y_column='amount', budget=None, movi
 
         # Make a datetime that is normalized/shifted to sit inside a bar chart bar
         # (bars are plotted centered on their date)
-        df_daily[f'shifted_{date_column}'] = df_daily.groupby(pd.Grouper(freq="MS"))[date_column].transform(_date_shift)
+        df_daily[f'shifted_{date_column}'] = df_daily.groupby(pd.Grouper(freq="MS"))[date_column].transform(date_shift)
 
     # Plot bars monthly
     bar_name = "Monthly"
@@ -216,20 +218,6 @@ def update_figure_using_button(n_clicks, category, start_date, end_date, ma, plo
 
 
 # Helpers
-def _date_shift(ds, scale_factor=0.8):
-    """
-    Scales/shifts a date Series such that dates are shifted ~1/2 month back and scaled so each month is * scale factor)
-    """
-    # Shift +1 second so that MonthBegin of the very first date in a month isn't pushed to the previous month
-    month_begin = ds + datetime.timedelta(1) + pd.offsets.MonthBegin(-1)
-    month_end = ds + pd.offsets.MonthEnd(0)
-
-    # Make a start date that is shifted half of a scaled month to the left of the beginning of this month
-    reference_start = -((month_end - month_begin) * scale_factor / 2) + month_begin
-    # Compute the date relative to a month start
-    relative_date = (ds - month_begin) * scale_factor
-    return relative_date + reference_start
-
 
 if __name__ == '__main__':
     app.run_server(debug=True)
