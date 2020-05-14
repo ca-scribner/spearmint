@@ -1,12 +1,12 @@
 import argparse
-import json
 import pandas as pd
+
+import plotly.graph_objects as go
 import dash
 import dash_core_components as dcc
 import dash_html_components as html
 import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output, State, ALL
-import plotly.graph_objects as go
 
 from spearmint.dashboard.budget_sidebar_elements import make_sidebar_ul
 from spearmint.dashboard.budget_sidebar_elements import register_sidebar_list_click, get_checked_sidebar_children
@@ -21,7 +21,7 @@ ANNOTATION_ARGS = dict(
     xref='x1',
     yref='y1',
     showarrow=False,
-    font=dict(color='black',),
+    font=dict(color='black'),
 )
 
 CATEGORY_COLUMN = "category"
@@ -33,6 +33,26 @@ external_stylesheets = [dbc.themes.BOOTSTRAP]
 app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
 
 BUDGET_COLLECTION = get_expense_budget_collection()
+
+
+# Define a right margin for the heatmap and barchart.  This is to achieve a (implicitly) shared x-axis without having to
+# put them in the same figure.
+SHARED_FIGURE_MARGIN = {
+    'l': 150,
+    'r': 100,
+    't': 0,
+    'b': 0,
+}
+
+
+FIGURE_BACKGROUND = {
+    'paper_bgcolor': 'rgba(0, 0, 0, 0)',
+    'plot_bgcolor': 'rgba(0, 0, 0, 0)',
+}
+
+
+# Define x-axis padding to be shared across heatmap and barchart
+X_AXIS_PAD = pd.Timedelta(15, unit='D')
 
 
 def budget_heatmap(df, datetime_column=DATETIME_COLUMN, category_column=CATEGORY_COLUMN,
@@ -91,7 +111,7 @@ def budget_heatmap(df, datetime_column=DATETIME_COLUMN, category_column=CATEGORY
         return fig
 
     # Rearrange df of individual transactions into format needed
-    df_sums = df[['budget_name', datetime_column, amount_column]]\
+    df_sums = df[['budget_name', datetime_column, amount_column]] \
         .groupby(['budget_name', pd.Grouper(key=datetime_column, freq='MS')]).sum()
 
     # Make a regular index with all category/month combinations having values.
@@ -117,7 +137,6 @@ def budget_heatmap(df, datetime_column=DATETIME_COLUMN, category_column=CATEGORY
         # Reindexed to broadcast across all dates
         # level sets the index to match to.  Others are broadcast across
         df_budget = df_budget.reindex(df_sums.index, level='budget_name')
-
 
     # NOT TESTED(?)
     # elif isinstance(budget, dict):
@@ -171,18 +190,30 @@ def budget_heatmap(df, datetime_column=DATETIME_COLUMN, category_column=CATEGORY
             colorscale=colorscale,
             zmin=zmin,
             zmax=zmax,
+            xgap=1,
+            ygap=3,
         )
     )
-    fig.update_layout(annotations=annotations)
+
+    fig.update_layout(
+        annotations=annotations,
+        **FIGURE_BACKGROUND
+    )
     fig.update_yaxes(dtick=1)
+
+    # Ensure axes show full range of data, and pad by same amount as other figures
+    fig.update_xaxes(range=[start_date - X_AXIS_PAD, end_date + X_AXIS_PAD], dtick="M1")
+
     return fig
 
 
 def monthly_bar(df, datetime_column=DATETIME_COLUMN, y_column=AMOUNT_COLUMN, budget=None, moving_average_window=None,
                 start_date=None, end_date=None, fig=None, plot_burn_rate=False):
-
     if fig is None:
         fig = go.Figure()
+
+    start_date = pd.to_datetime(start_date)
+    end_date = pd.to_datetime(end_date)
 
     # Rearrange data into what we need
     df_monthly = df.groupby(pd.Grouper(key=datetime_column, freq='MS')).sum()
@@ -201,7 +232,7 @@ def monthly_bar(df, datetime_column=DATETIME_COLUMN, y_column=AMOUNT_COLUMN, bud
 
         # Make a datetime that is normalized/shifted to sit inside a bar chart bar
         # (bars are plotted centered on their date)
-        df_daily[f'shifted_{datetime_column}'] = df_daily.groupby(pd.Grouper(freq="MS"))[datetime_column]\
+        df_daily[f'shifted_{datetime_column}'] = df_daily.groupby(pd.Grouper(freq="MS"))[datetime_column] \
             .transform(date_shift)
 
     # Plot bars monthly
@@ -214,7 +245,9 @@ def monthly_bar(df, datetime_column=DATETIME_COLUMN, y_column=AMOUNT_COLUMN, bud
         name=bar_name,
         hoverinfo="y",
     ))
-    fig.update_xaxes(range=[start_date, end_date], dtick="M1")
+
+    # Ensure axes show full range of data, and pad by same amount as other figures
+    fig.update_xaxes(range=[start_date - X_AXIS_PAD, end_date + X_AXIS_PAD], dtick="M1")
 
     if budget:
         fig.add_shape(
@@ -244,9 +277,9 @@ def monthly_bar(df, datetime_column=DATETIME_COLUMN, y_column=AMOUNT_COLUMN, bud
             # TODO: This hovertext would make more sense in the bar rather than on just the moving average dot
             df_ma['delta'] = df_ma[y_column] - budget
             df_ma['overunder'] = df_ma.apply(lambda row: "under" if row.loc['delta'] > 0 else "over", axis=1)
-            print(f"df_ma = {df_ma}")
-            hovertext = df_ma.apply(lambda row: f"${row.loc[y_column]:.2f} (${abs(row.loc['delta']):.2f} {row.loc['overunder']} budget)", axis=1)
-            print(f"hovertext (a)= {hovertext}")
+            hovertext = df_ma.apply(
+                lambda row: f"${row.loc[y_column]:.2f} (${abs(row.loc['delta']):.2f} {row.loc['overunder']} budget)",
+                axis=1)
             hovertext = hovertext.to_list()
 
             # hovertext = (df_ma[y_column] - budget).to_list(),
@@ -261,8 +294,7 @@ def monthly_bar(df, datetime_column=DATETIME_COLUMN, y_column=AMOUNT_COLUMN, bud
                 return "green"
             else:
                 return "red"
-        print(f"colorlist = {list(map(set_color, df_ma[y_column]))}")
-        print(f"hovertext = {hovertext}")
+
         fig.add_trace(go.Scatter(
             x=df_ma.index,
             y=df_ma[y_column],
@@ -367,6 +399,7 @@ def get_controls():
         # style=dict(fontSize='10px'),
     )
 
+
 def get_app_layout():
     return html.Div(
         children=[
@@ -382,15 +415,27 @@ def get_app_layout():
                             ),
                             dbc.Col(
                                 children=[
-                                    dcc.Graph(
-                                        id='heatmap-graph',
-                                        # This should be set commonly with any other figures
-                                        style={'height': '60vh'},
+                                    html.Div(
+                                        id='heatmap-graph-div',
+                                        children=dcc.Graph(
+                                            id='heatmap-graph',
+                                            # This should be set commonly with any other figures
+                                            style={'height': '55vh'},
+                                        ),
+                                        # Start by hiding the graph
+                                        # style={'display': 'none'},
+
                                     ),
-                                    dcc.Graph(
-                                        id='bar-graph',
-                                        style={'height': '40vh'},
-                                    )
+                                    html.Div(
+                                        id='bar-graph-div',
+                                        children=dcc.Graph(
+                                            id='bar-graph',
+                                            # This should be set commonly with any other figures
+                                            style={'height': '35vh'},
+                                        ),
+                                        # Start by hiding the graph
+                                        # style={'display': 'none'},
+                                    ),
                                 ],
                                 lg=9, md=8, xs=6,
                                 id="content-col",
@@ -405,14 +450,16 @@ def get_app_layout():
     )
 
 
-@app.callback(Output("heatmap-graph", "figure"),
-              [Input('monthly-hist-date-range', "start_date"),
-               Input('monthly-hist-date-range', "end_date"),
-               Input("monthly-hist-ma-slider", "value"),
-               Input("sidebar-ul", "children")
-               ],
-              )
-def update_figure(start_date, end_date, ma, sidebar_ul_children):
+@app.callback(
+    Output("heatmap-graph", "figure"),
+    [
+        Input('monthly-hist-date-range', "start_date"),
+        Input('monthly-hist-date-range', "end_date"),
+        Input("monthly-hist-ma-slider", "value"),
+        Input("sidebar-ul", "children")
+    ],
+)
+def update_heatmap(start_date, end_date, ma, sidebar_ul_children):
     df = get_all_transactions('df')
 
     budgets_to_show = get_checked_sidebar_children(sidebar_ul_children)
@@ -429,6 +476,10 @@ def update_figure(start_date, end_date, ma, sidebar_ul_children):
                          start_date=start_date,
                          end_date=end_date,
                          )
+
+    # Update layout to match other figures in this column
+    fig.update_layout(margin=SHARED_FIGURE_MARGIN)
+    fig.update_yaxes(automargin=False)  # Otherwise our figures will be out of alignment
     return fig
 
 
@@ -447,7 +498,7 @@ app.callback(
      Input('monthly-hist-date-range', "start_date"),
      Input('monthly-hist-date-range', "end_date"),
      Input("monthly-hist-ma-slider", "value"),
-    ]
+     ]
 )
 def update_barchart(clickData, start_date, end_date, moving_average_window):
     if not clickData:
@@ -457,23 +508,43 @@ def update_barchart(clickData, start_date, end_date, moving_average_window):
 
     # budget_name is first point clicked's (click only returns one) y attribute
     budget_name = clickData["points"][0]['y']
-    print(f"budget_name = {budget_name}")
 
     # Filter down to only the budget_name we care about, aggregating categories to a budget if needed
     budget = BUDGET_COLLECTION.get_budget_by_name(budget_name)
     df['budget_name'] = budget.aggregate_categories_to_budget(df[CATEGORY_COLUMN])
     df = df.loc[df['budget_name'] == budget_name]
 
-    return monthly_bar(df,
-                       datetime_column=DATETIME_COLUMN,
-                       y_column=AMOUNT_COLUMN,
-                       budget=budget.amount,
-                       moving_average_window=moving_average_window,
-                       start_date=start_date,
-                       end_date=end_date,
-                       plot_burn_rate=True
-                       )
+    fig = monthly_bar(df,
+                      datetime_column=DATETIME_COLUMN,
+                      y_column=AMOUNT_COLUMN,
+                      budget=budget.amount,
+                      moving_average_window=moving_average_window,
+                      start_date=start_date,
+                      end_date=end_date,
+                      plot_burn_rate=True
+                      )
 
+    # Update layout to match other figures in this column
+    fig.update_layout(
+        legend_orientation='h',
+        margin=SHARED_FIGURE_MARGIN,
+    )
+    # Apply transparent background
+    fig.update_layout(
+        **FIGURE_BACKGROUND,
+    )
+    # Aligned with above, use the title as a heading to the figure, and don't show the ticks since they're redundant
+    # with the figure above
+    fig.update_xaxes(
+        title=f"<b>{budget_name}</b>",
+        title_font=dict(size=18),
+        showticklabels=False,
+        side='top',
+    )
+
+    fig.update_yaxes(automargin=False)
+
+    return fig
 
 def parse_args():
     parser = argparse.ArgumentParser()
