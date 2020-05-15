@@ -171,8 +171,15 @@ def budget_heatmap(df, datetime_column=DATETIME_COLUMN, category_column=CATEGORY
 
     # Apply moving average, if applicable
     if moving_average_window:
-        df_sums = (df_sums.rolling(moving_average_window).
-                   mean()
+        # Do rolling mean for each budget_name, then put this back to original index (ignoring the new index added by
+        # groupby).  Maybe this could be done with a .transform instead?
+        # If we don't groupby on budget_name, the rolling means bleed between each budget_name (eg, last transaction
+        # of budgetA is averaged with first transaction of budgetB!)
+        old_index = df_sums.index.copy()
+        df_sums = (df_sums.groupby(level="budget_name").
+                   rolling(moving_average_window).
+                   mean().
+                   set_index(old_index)
                    )
 
     df_sums['delta'] = df_sums[amount_column] - df_sums['budget']
