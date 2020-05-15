@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import datetime
 import math
+import plotly.graph_objects as go
 
 
 def floor_to(x, to_value=0.05):
@@ -112,3 +113,17 @@ def date_shift(ds, scale_factor=0.8):
     # Compute the date relative to a month start
     relative_date = (ds - month_begin) * scale_factor
     return relative_date + reference_start
+
+
+def invisible_figure():
+    transparent_figure_background = {
+        'paper_bgcolor': 'rgba(0, 0, 0, 0)',
+        'plot_bgcolor': 'rgba(0, 0, 0, 0)',
+    }
+    fig = go.Figure()
+    fig.update_layout(
+        **transparent_figure_background,
+    )
+    fig.update_xaxes(showticklabels=False)
+    fig.update_yaxes(showticklabels=False)
+    return fig

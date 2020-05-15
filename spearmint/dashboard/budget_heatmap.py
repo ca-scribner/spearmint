@@ -10,7 +10,8 @@ from dash.dependencies import Input, Output, State, ALL
 
 from spearmint.dashboard.budget_sidebar_elements import make_sidebar_ul
 from spearmint.dashboard.budget_sidebar_elements import register_sidebar_list_click, get_checked_sidebar_children
-from spearmint.dashboard.utils import get_rounded_z_range_including_mid, make_centered_rg_colorscale, date_shift
+from spearmint.dashboard.utils import get_rounded_z_range_including_mid, make_centered_rg_colorscale, date_shift, \
+    invisible_figure
 from spearmint.data.db_session import global_init
 from spearmint.data_structures.budget import BudgetCollection
 from spearmint.services.budget import get_expense_budget_collection
@@ -422,9 +423,10 @@ def get_app_layout():
                                             # This should be set commonly with any other figures
                                             style={'height': '55vh'},
                                         ),
-                                        # Start by hiding the graph
-                                        # style={'display': 'none'},
-
+                                        # Start with graph hidden (no data populating it yet)
+                                        # This gets quickly overridden by the callbacks which instead make invisible
+                                        # figures, but it avoids an empty plot showing briefly during load
+                                        style={'display': 'none'},
                                     ),
                                     html.Div(
                                         id='bar-graph-div',
@@ -433,8 +435,8 @@ def get_app_layout():
                                             # This should be set commonly with any other figures
                                             style={'height': '35vh'},
                                         ),
-                                        # Start by hiding the graph
-                                        # style={'display': 'none'},
+                                        # Start with graph hidden (no data populating it yet)
+                                        style={'display': 'none'},
                                     ),
                                 ],
                                 lg=9, md=8, xs=6,
@@ -451,7 +453,10 @@ def get_app_layout():
 
 
 @app.callback(
-    Output("heatmap-graph", "figure"),
+    [
+        Output("heatmap-graph-div", "style"),
+        Output("heatmap-graph", "figure"),
+    ],
     [
         Input('monthly-hist-date-range', "start_date"),
         Input('monthly-hist-date-range', "end_date"),
@@ -460,9 +465,21 @@ def get_app_layout():
     ],
 )
 def update_heatmap(start_date, end_date, ma, sidebar_ul_children):
-    df = get_all_transactions('df')
-
     budgets_to_show = get_checked_sidebar_children(sidebar_ul_children)
+
+    div_style = {'display': 'block'}
+
+    if len(budgets_to_show) == 0:
+        # If no data selected, return an empty, blanked out figure and set the div style to not be hidden
+        # There's a bug where if we hide this figure now, it'll raise javascript errors due to sizing.  I think it makes
+        # a really small figure and then scales it up, but has trouble with the small figure?
+        # Related to: https://github.com/plotly/plotly.js/issues/4155
+        fig = invisible_figure()
+
+        # "show" the invisible figure by returning a style {display == block}
+        return div_style, fig
+
+    df = get_all_transactions('df')
 
     # Make a subset of the overall Budget definition for only these children
     bc_subset = BUDGET_COLLECTION.slice_by_budgets(budgets_to_show)
@@ -480,7 +497,7 @@ def update_heatmap(start_date, end_date, ma, sidebar_ul_children):
     # Update layout to match other figures in this column
     fig.update_layout(margin=SHARED_FIGURE_MARGIN)
     fig.update_yaxes(automargin=False)  # Otherwise our figures will be out of alignment
-    return fig
+    return div_style, fig
 
 
 # Sidebar callbacks
@@ -493,16 +510,25 @@ app.callback(
 
 # Bar chart callback
 @app.callback(
-    Output("bar-graph", "figure"),
-    [Input("heatmap-graph", "clickData"),
-     Input('monthly-hist-date-range', "start_date"),
-     Input('monthly-hist-date-range', "end_date"),
-     Input("monthly-hist-ma-slider", "value"),
+    [
+        Output("bar-graph-div", "style"),
+        Output("bar-graph", "figure"),
+    ],
+    [
+        Input("heatmap-graph", "clickData"),
+        Input('monthly-hist-date-range', "start_date"),
+        Input('monthly-hist-date-range', "end_date"),
+        Input("monthly-hist-ma-slider", "value"),
      ]
 )
 def update_barchart(clickData, start_date, end_date, moving_average_window):
+    div_style = {'display': 'block'}
+
     if not clickData:
-        return go.Figure()
+        # See update_heatmap for why we return an invisible figure and always set div visible
+        fig = invisible_figure()
+        return div_style, fig
+
 
     df = get_all_transactions('df').copy()
 
@@ -544,7 +570,8 @@ def update_barchart(clickData, start_date, end_date, moving_average_window):
 
     fig.update_yaxes(automargin=False)
 
-    return fig
+    return div_style, fig
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
