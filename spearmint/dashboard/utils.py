@@ -104,8 +104,7 @@ def date_shift(ds, scale_factor=0.8):
     might occur between Mar 20 and April 10).  This was done to align data in a line graph with bars in a bargraph for
     the same months
     """
-    # Shift +1 second so that MonthBegin of the very first date in a month isn't pushed to the previous month
-    month_begin = ds + datetime.timedelta(1) + pd.offsets.MonthBegin(-1)
+    month_begin = round_date_to_month_begin(ds)
     month_end = ds + pd.offsets.MonthEnd(0)
 
     # Make a start date that is shifted half of a scaled month to the left of the beginning of this month
@@ -113,6 +112,21 @@ def date_shift(ds, scale_factor=0.8):
     # Compute the date relative to a month start
     relative_date = (ds - month_begin) * scale_factor
     return relative_date + reference_start
+
+
+def round_date_to_month_begin(ds, shift_n_months=0):
+    """
+    Rounds dates to the beginning of their month, but handles the first date of a month differently than pd.offsets
+
+    pd.offsets rounds the first day of a month to the previous month (wtf?)
+
+    Args:
+        shift_n_months (int): Number of months to shift the date by.  If 0, the start of the present month is returned.
+                              If -2, the start of the month two prior is returned
+                              eg: if shift_n_months==-2, March 6 yields Jan 1
+    """
+    # Shift +1 day so that MonthBegin of the very first date in a month isn't pushed to the previous month
+    return ds + datetime.timedelta(1) + pd.offsets.MonthBegin(-1 + shift_n_months)
 
 
 def invisible_figure():

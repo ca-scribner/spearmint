@@ -11,7 +11,7 @@ from dash.dependencies import Input, Output, State, ALL
 from spearmint.dashboard.budget_sidebar_elements import make_sidebar_ul
 from spearmint.dashboard.budget_sidebar_elements import register_sidebar_list_click, get_checked_sidebar_children
 from spearmint.dashboard.utils import get_rounded_z_range_including_mid, make_centered_rg_colorscale, date_shift, \
-    invisible_figure
+    invisible_figure, round_date_to_month_begin
 from spearmint.data.db_session import global_init
 from spearmint.data_structures.budget import BudgetCollection
 from spearmint.services.budget import get_expense_budget_collection
@@ -91,7 +91,7 @@ def budget_heatmap(df, datetime_column=DATETIME_COLUMN, category_column=CATEGORY
     if fig is None:
         fig = go.Figure()
 
-    end_date, start_date, date_range = _parse_dates(datetime_column, df, end_date, start_date)
+    end_date, start_date, date_range = _parse_dates(datetime_column, df, end_date, start_date, moving_average_window)
 
     # If we have a budget collection with aggregated budgets (multiple categories -> single budget), aggregate
     if isinstance(budget, BudgetCollection):
@@ -175,6 +175,7 @@ def budget_heatmap(df, datetime_column=DATETIME_COLUMN, category_column=CATEGORY
         # groupby).  Maybe this could be done with a .transform instead?
         # If we don't groupby on budget_name, the rolling means bleed between each budget_name (eg, last transaction
         # of budgetA is averaged with first transaction of budgetB!)
+        # Could also use .droplevel(0) to drop the index level
         old_index = df_sums.index.copy()
         df_sums = (df_sums.groupby(level="budget_name").
                    rolling(moving_average_window).
@@ -210,7 +211,7 @@ def budget_heatmap(df, datetime_column=DATETIME_COLUMN, category_column=CATEGORY
     fig.update_yaxes(dtick=1)
 
     # Ensure axes show full range of data, and pad by same amount as other figures
-    fig.update_xaxes(range=[start_date - X_AXIS_PAD, end_date + X_AXIS_PAD], dtick="M1")
+    fig.update_xaxes(range=[start_date - X_AXIS_PAD, end_date], dtick="M1")
 
     return fig
 
@@ -351,17 +352,39 @@ def _make_annotations(df_sums):
     return annotations
 
 
-def _parse_dates(date_column, df, end_date, start_date):
+def _parse_dates(date_column, df, end_date, start_date, moving_average_window):
+    """
+    Returns parsed start_ and end_date and a date_range for the dates, including left padding for moving_average_window
+
+    start_date is rounded down to the beginning of its month, end_date is rounded up to the beginning of the next month,
+    so that a date_range from them includes all months that they're present in.  date_range is wider than the
+    interval between start_date and end_date by moving_average_window months
+
+    Args:
+        date_column:
+        df:
+        end_date:
+        start_date:
+
+    Returns:
+
+    """
+
+
     if start_date is None:
         start_date = df[date_column].min()
     else:
         start_date = pd.to_datetime(start_date)
+    start_date = round_date_to_month_begin(start_date)
+    start_date_padded = round_date_to_month_begin(start_date, -(moving_average_window - 1))
+
     if end_date is None:
         end_date = df[date_column].max()
     else:
         end_date = pd.to_datetime(end_date)
+    end_date = end_date + pd.offsets.MonthEnd(0) #+ pd.Timedelta(1, unit='d')
 
-    date_range = pd.date_range(start=start_date, end=end_date, freq='MS')
+    date_range = pd.date_range(start=start_date_padded, end=end_date, freq='MS')
     return end_date, start_date, date_range
 
 
