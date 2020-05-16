@@ -376,13 +376,17 @@ def _parse_dates(date_column, df, end_date, start_date, moving_average_window):
     else:
         start_date = pd.to_datetime(start_date)
     start_date = round_date_to_month_begin(start_date)
-    start_date_padded = round_date_to_month_begin(start_date, -(moving_average_window - 1))
+
+    if moving_average_window:
+        start_date_padded = round_date_to_month_begin(start_date, -(moving_average_window - 1))
+    else:
+        start_date_padded = start_date
 
     if end_date is None:
         end_date = df[date_column].max()
     else:
         end_date = pd.to_datetime(end_date)
-    end_date = end_date + pd.offsets.MonthEnd(0) #+ pd.Timedelta(1, unit='d')
+    end_date = end_date + pd.offsets.MonthEnd(0)
 
     date_range = pd.date_range(start=start_date_padded, end=end_date, freq='MS')
     return end_date, start_date, date_range
