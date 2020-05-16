@@ -91,7 +91,7 @@ def budget_heatmap(df, datetime_column=DATETIME_COLUMN, category_column=CATEGORY
     if fig is None:
         fig = go.Figure()
 
-    end_date, start_date, date_range = _parse_dates(datetime_column, df, end_date, start_date, moving_average_window)
+    start_date, end_date, date_range = _parse_dates(datetime_column, df, end_date, start_date, moving_average_window)
 
     # If we have a budget collection with aggregated budgets (multiple categories -> single budget), aggregate
     if isinstance(budget, BudgetCollection):
@@ -218,14 +218,22 @@ def budget_heatmap(df, datetime_column=DATETIME_COLUMN, category_column=CATEGORY
 
 def monthly_bar(df, datetime_column=DATETIME_COLUMN, y_column=AMOUNT_COLUMN, budget=None, moving_average_window=None,
                 start_date=None, end_date=None, fig=None, plot_burn_rate=False):
+    """
+    Returns a plotly figure of a bar chart of df[y_column], grouped monthly by df[datetime_column].
+
+    Optionally has a horizontal line at y=budget, a moving average of the monthly data overlaid on the figure, and
+    lineplots overlaid on each bar showing the burn rate per month.
+
+    Optionally truncates view of the figure between start_date and end_date, but these only affect the range shown
+    on the plot and do not remove data from being used in the moving average.
+    """
     if fig is None:
         fig = go.Figure()
 
-    start_date = pd.to_datetime(start_date)
-    end_date = pd.to_datetime(end_date)
+    start_date, end_date, date_range = _parse_dates(datetime_column, df, end_date, start_date, moving_average_window)
 
     # Rearrange data into what we need
-    df_monthly = df.groupby(pd.Grouper(key=datetime_column, freq='MS')).sum()
+    df_monthly = df.groupby(pd.Grouper(key=datetime_column, freq='MS')).sum().reindex(date_range, fill_value=0.0)
 
     if plot_burn_rate:
         df_daily = df.groupby(pd.Grouper(key=datetime_column, freq='d')).sum()
@@ -256,7 +264,7 @@ def monthly_bar(df, datetime_column=DATETIME_COLUMN, y_column=AMOUNT_COLUMN, bud
     ))
 
     # Ensure axes show full range of data, and pad by same amount as other figures
-    fig.update_xaxes(range=[start_date - X_AXIS_PAD, end_date + X_AXIS_PAD], dtick="M1")
+    fig.update_xaxes(range=[start_date - X_AXIS_PAD, end_date], dtick="M1")
 
     if budget:
         fig.add_shape(
@@ -389,7 +397,7 @@ def _parse_dates(date_column, df, end_date, start_date, moving_average_window):
     end_date = end_date + pd.offsets.MonthEnd(0)
 
     date_range = pd.date_range(start=start_date_padded, end=end_date, freq='MS')
-    return end_date, start_date, date_range
+    return start_date, end_date, date_range
 
 
 def get_date_picker():
