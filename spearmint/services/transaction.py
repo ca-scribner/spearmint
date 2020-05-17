@@ -16,14 +16,9 @@ def dataframe_to_transactions(df, column_name_map=PARSED_NAME_MAP):
 
 
 def _row_dict_to_transaction(row_dict, column_name_map):
-    transaction = Transaction(
-        datetime=row_dict[column_name_map["datetime"]],
-        description=row_dict[column_name_map["description"]],
-        amount=row_dict[column_name_map["amount"]],
-        account_name=row_dict[column_name_map["account_name"]],
-        source_file=row_dict[column_name_map["source_file"]],
-        category=row_dict[column_name_map["category"]],
-    )
+    # Loop over all attributes requested from transaction to build a new transaction from this dict
+    kwargs = {k: row_dict[column_name_map[k]] for k in get_sa_obj_keys(Transaction) if k is not 'id'}
+    transaction = Transaction(**kwargs)
     return transaction
 
 
@@ -113,6 +108,9 @@ def sa_obj_as_dict(sa_obj):
             for c in inspect(sa_obj).mapper.column_attrs}
 
 
+def get_sa_obj_keys(sa_obj):
+    return (prop.key for prop in inspect(sa_obj).mapper.column_attrs)
+
 
 
 @click.group()
@@ -141,9 +139,11 @@ def add(db_path, csv_file, csv_flavor, account_name):
             pc_mc: PC Mastercard formatted csv file\n
     """
     # Initialize db connection
-    global_init(db_path)
+    global_init(db_path, False)
 
     df = import_csv_as_df(csv_file, csv_flavor, account_name)
+
+    print(df)
 
     add_transactions_from_dataframe(df)
 
