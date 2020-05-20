@@ -374,8 +374,6 @@ def _parse_dates(date_column, df, end_date, start_date, moving_average_window):
     Returns:
 
     """
-
-
     if start_date is None:
         start_date = df[date_column].min()
     else:
