@@ -25,6 +25,7 @@ LABELED_TRANSACTIONS = [
 @pytest.fixture
 def db_with_unclassified(db_init):
     s = create_session()
+    # TODO: Update this to use label table
     trxs = [
         Transaction(description="Ignore0", category="something"),
         Transaction(description="NoCatAvail0"),
@@ -63,4 +64,5 @@ def test_lookup_classifier(db_with_unclassified, create_label_file):
 
     # Spot check we didnt overwrite
     all_trxs = s.query(Transaction).all()
+    # TODO: Update this to use category table
     assert all_trxs[0].category == "something"

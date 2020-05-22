@@ -46,10 +46,9 @@ def get_transaction_by_id(transaction_id) -> Transaction:
     return trx
 
 
-# Can I set output type dynamically using type of the Transaction.category property?
-def get_transaction_categories() -> List[str]:
+def get_unique_transaction_categories() -> List[str]:
     """
-    Returns list of all unique, valid categories in the transaction table
+    Returns list of all unique, valid categories used in the transaction table
     """
     s = create_session()
     categories = s.query(Transaction.category).distinct()
