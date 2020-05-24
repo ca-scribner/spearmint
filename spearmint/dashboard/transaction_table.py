@@ -205,6 +205,7 @@ def table_edit_callback(data, data_previous, changed_column=CHANGED_COLUMN):
         diff.append({
             'index': i,
             "column_name": CATEGORY_ID,
+            # Mock of diff object doesn't need these
             # "current_value": "IGNORED_NOT_RELEVANT",
             # "previous_value": "IGNORED_NOT_RELEVANT",
         })
