@@ -2,6 +2,7 @@ from typing import List
 import pandas as pd
 import click
 from sqlalchemy import inspect, distinct
+from sqlalchemy.orm import joinedload
 
 from spearmint.data.category import Category
 from spearmint.data.db_session import create_session, global_init
@@ -114,7 +115,7 @@ def get_unique_transaction_categories_as_string(category_type='all') -> List[str
     return categories
 
 
-def get_all_transactions(return_type='list') -> List[Transaction]:
+def get_all_transactions(return_type='list', lazy=False) -> List[Transaction]:
     """
     Returns all transactions as specified type
 
@@ -122,18 +123,28 @@ def get_all_transactions(return_type='list') -> List[Transaction]:
         return_type (str): One of:
                             list: returns as [Transaction]
                             df: returns as pd.DataFrame with one row per transaction and all attributes as columns
+        lazy (bool): If True, lazily load transactions (thus information about linked categories will not be available).
+                     If False, eagerly load the category objects as well using joinedload
 
     Returns:
         See return_type
     """
     s = create_session()
-    trxs = s.query(Transaction).all()
+    q = s.query(Transaction)
+    if not lazy:
+        q = q.options(
+            joinedload(Transaction.category),
+            joinedload(Transaction.categories_suggested),
+        )
+
+    trxs = q.all()
     s.close()
 
     # Should test this first, but lazy...
     if return_type == 'list':
         pass
     elif return_type == 'df':
+        print("WARNING: transactions as df not tested after moving categories to category table.  Behaviour unknown")
         trxs = transactions_to_dataframe(trxs)
     else:
         raise ValueError(f"Invalid return_type {return_type}")
