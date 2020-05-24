@@ -13,13 +13,10 @@ class Category(SqlAlchemyBase):
     # raises when I typeset datetime to datetime.datetime.  Not sure why
     datetime: datetime_package.datetime = Column(DateTime)
     scheme: str = Column(String, nullable=False)
-    confidence: float = Column(Float, nullable=False)
+    confidence: float = Column(Float)
     category: str = Column(String, nullable=False)  # Should be index to category table
 
     transaction_id = Column(BigIntegerType, ForeignKey("transaction.id"))
 
     def __repr__(self):
-        # TODO
-        return "TODO"
-               # f"Transaction id={self.id}; cat={self.category}; amount={self.amount}; desc={self.description}; " \
-               # f"acct_name={self.account_name}; datetime={self.datetime}; source_file={self.source_file}"
+        return f"id={self.id}; category={self.category}; scheme={self.scheme}; confidence={self.confidence}"

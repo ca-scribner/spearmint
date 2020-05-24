@@ -15,7 +15,7 @@ from spearmint.dashboard.utils import get_rounded_z_range_including_mid, make_ce
 from spearmint.data.db_session import global_init
 from spearmint.data_structures.budget import BudgetCollection
 from spearmint.services.budget import get_expense_budget_collection
-from spearmint.services.transaction import get_all_transactions, get_unique_transaction_categories
+from spearmint.services.transaction import get_all_transactions, get_unique_transaction_categories_as_string
 
 MOVING_AVERAGE_SLIDER_TICKS = [1, 2, 3, 6, 12]
 ANNOTATION_ARGS = dict(

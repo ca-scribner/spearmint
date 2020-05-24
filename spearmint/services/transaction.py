@@ -3,6 +3,7 @@ import pandas as pd
 import click
 from sqlalchemy import inspect, distinct
 
+from spearmint.data.category import Category
 from spearmint.data.db_session import create_session, global_init
 from spearmint.data.transaction import Transaction
 from spearmint.etl.transaction_extractor import PARSED_NAME_MAP
@@ -11,19 +12,59 @@ from spearmint.etl.mint.transaction_extractor import MintTransactionExtractor
 from spearmint.etl.pc_mc.transaction_extractor import PcMcTransactionExtractor
 
 
-def dataframe_to_transactions(df, column_name_map=PARSED_NAME_MAP):
-    return [_row_dict_to_transaction(row_dict, column_name_map) for row_dict in df.to_dict("records")]
+# Enumerators (to be moved somewhere that makes more sense)
+FROM_FILE = "from_file"
 
 
-def _row_dict_to_transaction(row_dict, column_name_map):
-    # Loop over all attributes requested from transaction to build a new transaction from this dict
-    kwargs = {k: row_dict[column_name_map[k]] for k in get_sa_obj_keys(Transaction) if k is not 'id'}
-    transaction = Transaction(**kwargs)
+def dataframe_to_transactions(df: pd.DataFrame, accept_category: bool = False, column_name_map: dict = PARSED_NAME_MAP):
+    return [_row_dict_to_transaction(row_dict, column_name_map, accept_category) for row_dict in df.to_dict("records")]
+
+
+def _row_dict_to_transaction(row_dict: dict, column_name_map: dict, accept_category: bool = False):
+    # If we have a category specified in the file, create a Category instance
+    if row_dict[column_name_map["category"]]:
+        category = Category(
+            scheme=FROM_FILE,
+            category=row_dict[column_name_map["category"]],
+        )
+    else:
+        category = None
+
+    transaction = Transaction(
+        datetime=row_dict[column_name_map["datetime"]],
+        description=row_dict[column_name_map["description"]],
+        amount=row_dict[column_name_map["amount"]],
+        account_name=row_dict[column_name_map["account_name"]],
+        source_file=row_dict[column_name_map["source_file"]],
+    )
+
+    if category:
+        transaction.categories_suggested.append(category)
+
+        if accept_category:
+            transaction.category = category
     return transaction
 
 
-def add_transactions_from_dataframe(df):
-    transactions = dataframe_to_transactions(df)
+def add_transactions_from_dataframe(df: pd.DataFrame, accept_category: bool = False):
+    """
+    Puts rows of df to the transactions db, with any categories added as suggested categories in the category table
+
+    Optionally, can accept the categories and attach them to transactions as the selected category.  Otherwise, accepted
+    category is left blank
+
+    TODO: This is directly tied to the transaction extractor (implicitly linked by assuming the df naming conventions),
+          should this just be a method on that class?  Or, I should move the nomenclature definition somewhere central
+
+    Args:
+        df (pd.DataFrame): Pandas dataframe with rows of transactions
+        accept_category (bool): If True, any categories in the DataFrame will also be "accepted" on the committed
+                                transactions
+
+    Returns:
+        None
+    """
+    transactions = dataframe_to_transactions(df, accept_category)
 
     s = create_session()
     s.add_all(transactions)
@@ -46,15 +87,30 @@ def get_transaction_by_id(transaction_id) -> Transaction:
     return trx
 
 
-def get_unique_transaction_categories() -> List[str]:
+def get_unique_transaction_categories_as_string(category_type='all') -> List[str]:
     """
-    Returns list of all unique, valid categories used in the transaction table
+    Returns list of all unique categories used in the transaction table as string category labels
+
+    Args:
+        category_type (str): all: returns all unique category names from the category table
+                             accepted: returns only category names from "accepted" categories in the transaction table
     """
     s = create_session()
-    categories = s.query(Transaction.category).distinct()
-    # The query returns a tuple per record.  Flatten
-    categories = [tup[0] for tup in categories]
+    if category_type == 'all':
+        categories = s.query(Category.category).distinct().all()
+    elif category_type == 'accepted':
+        raise NotImplementedError("category_type 'accepted' not yet implemented")
+        # From before.  Useful?
+        # transactions = s.query(Transaction).join(Transaction.category)
+        # categories = s.query(Transaction.category).distinct()
+        # # The query returns a tuple per record.  Flatten
+        # categories = [tup[0] for tup in categories]
+    else:
+        raise ValueError(f"Unsupported category_type '{category_type}'")
     s.close()
+
+    # Category is just the first element of the tuples returned
+    categories = [x[0] for x in categories]
     return categories
 
 
@@ -126,7 +182,12 @@ def cli():
     default=None,
     help="Account Name applied to all loaded transactions.  Used only for pc_mc csv flavor"
 )
-def add(db_path, csv_file, csv_flavor, account_name):
+@click.option(
+    "--accept/--no_accept",
+    default=False,
+    help="Optionally accept categories loaded as accepted categories"
+)
+def add(db_path, csv_file, csv_flavor, account_name, accept):
     """
     Add transactions to a database from a csv file, creating the database if required
 
@@ -144,7 +205,7 @@ def add(db_path, csv_file, csv_flavor, account_name):
 
     print(df)
 
-    add_transactions_from_dataframe(df)
+    add_transactions_from_dataframe(df, accept_category=accept)
 
 
 cli.add_command(add)

@@ -42,12 +42,19 @@ class Transaction(SqlAlchemyBase):
     categories_suggested_id: int = Column(BigIntegerType, ForeignKey("category.id"))
     categories_suggested: list = relationship("Category",
                                               backref="transaction",  # this trx is acccessible via label.transaction attr
-                                              primary_join="Transaction.id==Category.transaction_id",  # unambiguous relation
+                                              primaryjoin="Transaction.id==Category.transaction_id",  # unambiguous relation
                                               post_update=True,  # Because circular reference
                                               )
 
 
     def __repr__(self):
-        return f"Transaction id={self.id}; category={self.category.category}; amount={self.amount}; " \
+        try:
+            category = self.category.category
+        except AttributeError:
+            if self.category:
+                category = "(PRESENT)"
+            else:
+                category = "None"
+        return f"Transaction id={self.id}; category={category}; amount={self.amount}; " \
                f"desc={self.description}; acct_name={self.account_name}; datetime={self.datetime}; " \
-               f"source_file={self.source_file}"
+               f"source_file={self.source_file}, len(categories_suggested)={len(self.categories_suggested)}"
