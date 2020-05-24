@@ -18,6 +18,9 @@ from spearmint.services.transaction import get_all_transactions
 
 
 SUGGESTED_CATEGORY_PREFIX = "suggested category"
+CATEGORY = "category"
+CATEGORY_ID_SUFFIX = "_id"
+CATEGORY_ID = CATEGORY + CATEGORY_ID_SUFFIX
 
 # Column to keep track of any edits in the table
 CHANGED_COLUMN = "__changed"
@@ -27,17 +30,17 @@ CHANGED_COLUMN = "__changed"
 CHANGED_PAD_START = "__"
 CHANGED_PAD_END = "__"
 
-COLUMNS_TO_SHOW_FROM_DATA = ['id', 'datetime', 'amount', 'category', 'description'] + \
+COLUMNS_TO_SHOW_FROM_DATA = ['id', 'datetime', 'amount', CATEGORY, CATEGORY_ID, 'description'] + \
                             [f"{SUGGESTED_CATEGORY_PREFIX}_{i}" for i in range(1)]
 ADDITIONAL_COLUMNS_TO_SHOW = []
-COLUMNS_TO_EDIT = ['category']
+COLUMNS_TO_EDIT = [CATEGORY]
 COLUMN_DROPDOWNS = {
     # "category": {
     #     "options": [{"label": v, "value": v} for v in get_expense_budget_collection()]
     # }
 }
 COLUMNS_TO_HIDE = [CHANGED_COLUMN]
-COLUMNS_CLICKABLE_MAP = {f"{SUGGESTED_CATEGORY_PREFIX}_{i}": "category" for i in range(1)}
+COLUMNS_CLICKABLE_MAP = {f"{SUGGESTED_CATEGORY_PREFIX}_{i}": CATEGORY for i in range(1)}
 COLUMNS_TO_SHOW = COLUMNS_TO_SHOW_FROM_DATA + ADDITIONAL_COLUMNS_TO_SHOW + COLUMNS_TO_HIDE
 
 app = dash.Dash(__name__)
@@ -65,23 +68,19 @@ def load_data(n_suggested_categories=1):
     def trx_to_dict(trx: Transaction):
         # TODO: Sync these with globals above for shown columns
         d = {k: getattr(trx, k) for k in ['id', 'datetime', 'amount', 'description']}
-        d['category_id'] = trx.category_id
-        if d['category_id']:
-            d['category'] = trx.category.category
+        d[CATEGORY_ID] = trx.category_id
+        if d[CATEGORY_ID]:
+            d[CATEGORY] = trx.category.category
         else:
-            d['category'] = None
+            d[CATEGORY] = None
 
         for i in range(n_suggested_categories):
             try:
                 d[f'{SUGGESTED_CATEGORY_PREFIX}_{i}'] = trx.categories_suggested[i].category
-                d[f'{SUGGESTED_CATEGORY_PREFIX}_id_{i}'] = trx.categories_suggested[i].id
+                d[f'{SUGGESTED_CATEGORY_PREFIX}_{i}{CATEGORY_ID_SUFFIX}'] = trx.categories_suggested[i].id
             except IndexError:
                 d[f'{SUGGESTED_CATEGORY_PREFIX}_{i}'] = None
-                d[f'{SUGGESTED_CATEGORY_PREFIX}_id_{i}'] = None
-            # suggested = trx.categories_suggested
-            # for i, cat in enumerate(trx.categories_suggested[:n_suggested_categories]):
-            #     d[f'{SUGGESTED_CATEGORY_PREFIX}_{i}'] = trx.categories_suggested[i].category
-            #     d[f'{SUGGESTED_CATEGORY_PREFIX}_id_{i}'] = trx.categories_suggested[i].id
+                d[f'{SUGGESTED_CATEGORY_PREFIX}_{i}{CATEGORY_ID_SUFFIX}'] = None
 
         return d
 
@@ -164,7 +163,7 @@ def table_data_update_dispatcher(data_timestamp, active_cell, data, data_previou
     # These are logic branches that can result in edited data.  If we want them to trigger the later "on-edit" callback,
     # raise the data_edited flag
     if ctx.triggered[0]["prop_id"].endswith(".active_cell"):
-        returned = table_on_click_via_active_cell(active_cell, data, COLUMNS_CLICKABLE_MAP)
+        returned = accept_category_on_click_via_active_cell(active_cell, data, COLUMNS_CLICKABLE_MAP)
         if returned:
             data, data_previous, data_edited = returned
         else:
@@ -179,24 +178,49 @@ def table_data_update_dispatcher(data_timestamp, active_cell, data, data_previou
     return dash.no_update
 
 
-def table_edit_callback(data, data_previous):
+def table_edit_callback(data, data_previous, changed_column=CHANGED_COLUMN):
     """
-    Compares two dash table data entities, printing the (row, column) locations of any differences
+    Compares two dash table data entities, recording column that is different in row[changed_column]
     """
     # Determine where the change occurred
     diff = diff_dashtable(data, data_previous)
+
+    # Special case: If category changed and category_id did not, delete the category_id.  Do this first so the logic for
+    # recording changes in the second loop is shared (this callback should always see one or two differences at most, so
+    # this overhead should be small)
+    # We ignore the case of a category_id that changed without category changing because we expect category_id to be
+    # an uneditable columns
+    changed_category = set()
+    changed_category_id = set()
+    for d in diff:
+        if d['column_name'] == CATEGORY:
+            changed_category.add(d['index'])
+        if d['column_name'] == CATEGORY_ID:
+            changed_category_id.add(d['index'])
+
+    # Delete any hanging category_id
+    for i in changed_category - changed_category_id:
+        diff.append({'index': i, 'column_name': CATEGORY_ID})
+        data[i][CATEGORY_ID] = None
+        diff.append({
+            'index': i,
+            "column_name": CATEGORY_ID,
+            # "current_value": "IGNORED_NOT_RELEVANT",
+            # "previous_value": "IGNORED_NOT_RELEVANT",
+        })
 
     for d in diff:
         r_changed = d['index']
         c_changed = d['column_name']
 
         # If the column is empty it won't be in the dict.  Use .get to handle this with empty string as default
-        data[r_changed][CHANGED_COLUMN] = f"{data[r_changed].get(CHANGED_COLUMN, '')} {CHANGED_PAD_START}{c_changed}{CHANGED_PAD_END}"
+        # Current iteration can have duplicate changes noted here.  Remove or just handle when interpretting the column?
+        data[r_changed][changed_column] = f"{data[r_changed].get(changed_column, '')} {CHANGED_PAD_START}{c_changed}{CHANGED_PAD_END}"
 
     return data
 
 
-def table_on_click_via_active_cell(active_cell, rows, clickable_column_map):
+def accept_category_on_click_via_active_cell(active_cell, rows, columns_to_watch):
     """
     Hack to make a cell in a DashTable act like a button.
 
@@ -210,20 +234,25 @@ def table_on_click_via_active_cell(active_cell, rows, clickable_column_map):
         return None
 
     # If I click on a column that is clickable, (eg suggestion X), put that value into a different column (eg category)
-    if active_cell['column_id'] in clickable_column_map:
+    if active_cell['column_id'] in columns_to_watch:
         print("Caught click")
         source_column = active_cell['column_id']
-        target_column = clickable_column_map[source_column]
+        source_id_column = active_cell['column_id'] + CATEGORY_ID_SUFFIX
+
+        target_column = CATEGORY
+        target_id_column = CATEGORY_ID
 
         # Check if destination already has this content
-        if rows[active_cell['row']][target_column] == rows[active_cell['row']][source_column]:
-            print("data already updated")
+        if rows[active_cell['row']][target_column] == rows[active_cell['row']][source_column] or \
+           rows[active_cell['row']][target_id_column] == rows[active_cell['row']][source_id_column]:
+            print("data already up to date")
             return None
         else:
             print('updating data')
             # Make a deep copy of rows so we can later compare data to data_previous
             rows_previous = copy.deepcopy(rows)
             rows[active_cell['row']][target_column] = rows[active_cell['row']][source_column]
+            rows[active_cell['row']][target_id_column] = rows[active_cell['row']][source_id_column]
             return rows, rows_previous, True
 
     # No edits
