@@ -236,9 +236,12 @@ def accept_category_on_click_via_active_cell(active_cell, rows, columns_to_watch
 
     # If I click on a column that is clickable, (eg suggestion X), put that value into a different column (eg category)
     if active_cell['column_id'] in columns_to_watch:
-        print("Caught click")
         source_column = active_cell['column_id']
         source_id_column = active_cell['column_id'] + CATEGORY_ID_SUFFIX
+
+        # If cell is empty, ignore (we only overwrite if there is content to overwrite with)
+        if not rows[active_cell['row']][source_column]:
+            return None
 
         target_column = CATEGORY
         target_id_column = CATEGORY_ID
@@ -246,10 +249,8 @@ def accept_category_on_click_via_active_cell(active_cell, rows, columns_to_watch
         # Check if destination already has this content
         if rows[active_cell['row']][target_column] == rows[active_cell['row']][source_column] or \
            rows[active_cell['row']][target_id_column] == rows[active_cell['row']][source_id_column]:
-            print("data already up to date")
             return None
         else:
-            print('updating data')
             # Make a deep copy of rows so we can later compare data to data_previous
             rows_previous = copy.deepcopy(rows)
             rows[active_cell['row']][target_column] = rows[active_cell['row']][source_column]
