@@ -4,7 +4,7 @@ import pytest
 
 from spearmint.data.db_session import global_init, global_forget, create_session
 from spearmint.data.transaction import Transaction
-from spearmint.services.transaction import get_transaction_categories
+from spearmint.services.transaction import get_unique_transaction_categories
 
 
 @pytest.fixture
@@ -34,6 +34,6 @@ def db_with_desc_cat(db_init):
 def test_lookup_classifier(db_with_desc_cat):
     # Check that we get the right categories and that we're not getting just a full list
     expected_categories = set(str(trx["category"]) for trx in LABELED_TRANSACTIONS)
-    actual_categories = get_transaction_categories()
+    actual_categories = get_unique_transaction_categories()
     assert expected_categories == set(actual_categories)
     assert len(expected_categories) == len(actual_categories)
