@@ -12,9 +12,12 @@ import dash_table
 
 from spearmint.dashboard.diff_dashtable import diff_dashtable
 from spearmint.data.db_session import global_init
+from spearmint.data.transaction import Transaction
 from spearmint.services.budget import get_expense_budget_collection
 from spearmint.services.transaction import get_all_transactions
 
+
+SUGGESTED_CATEGORY_PREFIX = "suggested category"
 
 # Column to keep track of any edits in the table
 CHANGED_COLUMN = "__changed"
@@ -24,8 +27,9 @@ CHANGED_COLUMN = "__changed"
 CHANGED_PAD_START = "__"
 CHANGED_PAD_END = "__"
 
-COLUMNS_TO_SHOW_FROM_DATA = ['id', 'datetime', 'amount', 'category', 'description']
-ADDITIONAL_COLUMNS_TO_SHOW = ['suggested category']
+COLUMNS_TO_SHOW_FROM_DATA = ['id', 'datetime', 'amount', 'category', 'description'] + \
+                            [f"{SUGGESTED_CATEGORY_PREFIX}_{i}" for i in range(1)]
+ADDITIONAL_COLUMNS_TO_SHOW = []
 COLUMNS_TO_EDIT = ['category']
 COLUMN_DROPDOWNS = {
     # "category": {
@@ -33,7 +37,7 @@ COLUMN_DROPDOWNS = {
     # }
 }
 COLUMNS_TO_HIDE = [CHANGED_COLUMN]
-COLUMNS_CLICKABLE_MAP = {"suggested category": "category"}
+COLUMNS_CLICKABLE_MAP = {f"{SUGGESTED_CATEGORY_PREFIX}_{i}": "category" for i in range(1)}
 COLUMNS_TO_SHOW = COLUMNS_TO_SHOW_FROM_DATA + ADDITIONAL_COLUMNS_TO_SHOW + COLUMNS_TO_HIDE
 
 app = dash.Dash(__name__)
@@ -43,24 +47,56 @@ def define_columns(columns, editable):
     return [{"name": c, "id": c, "editable": c in editable} for c in columns]
 
 
-def load_data():
+def load_data(n_suggested_categories=1):
     """
     Gets data from the db and adds any extra columns
+
+    # TODO: Handle suggested categories more explicitly (dict specifying number per scheme?)
+
+    Args:
+        n_suggested_categories (int): Number of suggested categories to pull from the database
 
     Returns:
         (pd.DataFrame):
     """
-    df = get_all_transactions('df')
+    # df = get_all_transactions('df')
+    trxs = get_all_transactions()
+
+    def trx_to_dict(trx: Transaction):
+        # TODO: Sync these with globals above for shown columns
+        d = {k: getattr(trx, k) for k in ['id', 'datetime', 'amount', 'description']}
+        d['category_id'] = trx.category_id
+        if d['category_id']:
+            d['category'] = trx.category.category
+        else:
+            d['category'] = None
+
+        for i in range(n_suggested_categories):
+            try:
+                d[f'{SUGGESTED_CATEGORY_PREFIX}_{i}'] = trx.categories_suggested[i].category
+                d[f'{SUGGESTED_CATEGORY_PREFIX}_id_{i}'] = trx.categories_suggested[i].id
+            except IndexError:
+                d[f'{SUGGESTED_CATEGORY_PREFIX}_{i}'] = None
+                d[f'{SUGGESTED_CATEGORY_PREFIX}_id_{i}'] = None
+            # suggested = trx.categories_suggested
+            # for i, cat in enumerate(trx.categories_suggested[:n_suggested_categories]):
+            #     d[f'{SUGGESTED_CATEGORY_PREFIX}_{i}'] = trx.categories_suggested[i].category
+            #     d[f'{SUGGESTED_CATEGORY_PREFIX}_id_{i}'] = trx.categories_suggested[i].id
+
+        return d
+
+    trxs_as_dicts = [trx_to_dict(trx) for trx in trxs]
+    df = pd.DataFrame(trxs_as_dicts)
 
     for c in ADDITIONAL_COLUMNS_TO_SHOW + COLUMNS_TO_HIDE:
         if c in df:
             raise ValueError(f"Column {c} already exists!  Cannot add hidden column that overlaps with main data")
         df[c] = None
 
-    # Do things like populate suggestions via ML!  Or just randomly create them...
-    possible_categories = pd.unique(df['category'])
-    np.random.seed(42)
-    df['suggested category'] = np.random.choice(possible_categories, len(df))
+    # TODO: things like populate suggestions via ML!  Or just randomly create them...
+    # possible_categories = pd.unique(df['category'])
+    # np.random.seed(42)
+    # df['suggested category'] = np.random.choice(possible_categories, len(df))
 
     return df
 
@@ -128,10 +164,11 @@ def table_data_update_dispatcher(data_timestamp, active_cell, data, data_previou
     # These are logic branches that can result in edited data.  If we want them to trigger the later "on-edit" callback,
     # raise the data_edited flag
     if ctx.triggered[0]["prop_id"].endswith(".active_cell"):
-        # Simulate data_previous because on-click callback needs it but app State wont provide it in this case
-        data_previous = copy.deepcopy(data)
-        data = table_on_click_via_active_cell(active_cell, data, COLUMNS_CLICKABLE_MAP)
-        data_edited = True
+        returned = table_on_click_via_active_cell(active_cell, data, COLUMNS_CLICKABLE_MAP)
+        if returned:
+            data, data_previous, data_edited = returned
+        else:
+            data_edited = False
         # Do not return here because we still must hit the on-edit callback below
 
     # Final action that responds to edited data.  Do this separately and trigger both on data_timestamp (eg: user
@@ -139,7 +176,7 @@ def table_data_update_dispatcher(data_timestamp, active_cell, data, data_previou
     if ctx.triggered[0]["prop_id"].endswith(".data_timestamp") or data_edited:
         return table_edit_callback(data, data_previous)
 
-    raise ValueError("I should not be here.  Something isn't working right")
+    return dash.no_update
 
 
 def table_edit_callback(data, data_previous):
@@ -164,17 +201,33 @@ def table_on_click_via_active_cell(active_cell, rows, clickable_column_map):
     Hack to make a cell in a DashTable act like a button.
 
     If any cell in column 'a' is clicked, it overwrites this row's data in column b with the value in column a
+
+    Returns:
+        If a change is made, returns (rows, rows_prior_to_change)
+        If a change is not made, returns None
     """
     if active_cell is None:
-        return rows
+        return None
 
-    # If I click on a particular column (say suggestion X), put that value into a different column (say blessed clf)
+    # If I click on a column that is clickable, (eg suggestion X), put that value into a different column (eg category)
     if active_cell['column_id'] in clickable_column_map:
+        print("Caught click")
         source_column = active_cell['column_id']
         target_column = clickable_column_map[source_column]
-        rows[active_cell['row']][target_column] = rows[active_cell['row']][source_column]
 
-    return rows
+        # Check if destination already has this content
+        if rows[active_cell['row']][target_column] == rows[active_cell['row']][source_column]:
+            print("data already updated")
+            return None
+        else:
+            print('updating data')
+            # Make a deep copy of rows so we can later compare data to data_previous
+            rows_previous = copy.deepcopy(rows)
+            rows[active_cell['row']][target_column] = rows[active_cell['row']][source_column]
+            return rows, rows_previous, True
+
+    # No edits
+    return None
 
 
 # CLI
