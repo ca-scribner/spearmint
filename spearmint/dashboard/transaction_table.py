@@ -1,5 +1,6 @@
 import argparse
 import copy
+import itertools
 from pprint import pprint
 import pandas as pd
 import numpy as np
@@ -30,8 +31,26 @@ CHANGED_COLUMN = "__changed"
 CHANGED_PAD_START = "__"
 CHANGED_PAD_END = "__"
 
+# Specs for suggested colums.
+# TODO: Consolidate with other suggested defs
+def get_suggested_columns(spec):
+    to_return = []
+    for i in range(spec['n']):
+        to_return.extend((f"{spec['name']}_{i}", f"{spec['name']}_{i}{CATEGORY_ID_SUFFIX}"))
+    return to_return
+
+SUGGESTED_COLUMN_SPECS = [
+    {'name': f'{SUGGESTED_CATEGORY_PREFIX}_from_file', 'scheme': 'from_file', 'n': 1, 'order_by': None},
+    {'name': f'{SUGGESTED_CATEGORY_PREFIX}_from_clf', 'scheme': 'from_clf', 'n': 2, 'order_by': None},
+]
+# TODO: Simplify this expansion
+SUGGESTED_COLUMNS_TO_SHOW = list(itertools.chain(*[get_suggested_columns(spec) for spec in SUGGESTED_COLUMN_SPECS]))
+
+SUGGESTED_COLUMNS_TO_WATCH = [c for c in SUGGESTED_COLUMNS_TO_SHOW if not c.endswith(CATEGORY_ID_SUFFIX)]
+
 COLUMNS_TO_SHOW_FROM_DATA = ['id', 'datetime', 'amount', CATEGORY, CATEGORY_ID, 'description'] + \
-                            [f"{SUGGESTED_CATEGORY_PREFIX}_{i}" for i in range(1)]
+                            SUGGESTED_COLUMNS_TO_SHOW
+
 ADDITIONAL_COLUMNS_TO_SHOW = []
 COLUMNS_TO_EDIT = [CATEGORY]
 COLUMN_DROPDOWNS = {
@@ -40,8 +59,10 @@ COLUMN_DROPDOWNS = {
     # }
 }
 COLUMNS_TO_HIDE = [CHANGED_COLUMN]
-COLUMNS_CLICKABLE_MAP = {f"{SUGGESTED_CATEGORY_PREFIX}_{i}": CATEGORY for i in range(1)}
 COLUMNS_TO_SHOW = COLUMNS_TO_SHOW_FROM_DATA + ADDITIONAL_COLUMNS_TO_SHOW + COLUMNS_TO_HIDE
+
+
+
 
 app = dash.Dash(__name__)
 
@@ -50,14 +71,17 @@ def define_columns(columns, editable):
     return [{"name": c, "id": c, "editable": c in editable} for c in columns]
 
 
-def load_data(n_suggested_categories=1):
+def load_data(suggested_columns=tuple()):
     """
     Gets data from the db and adds any extra columns
 
-    # TODO: Handle suggested categories more explicitly (dict specifying number per scheme?)
-
     Args:
-        n_suggested_categories (int): Number of suggested categories to pull from the database
+        suggested_columns (dict): Specifies which suggested columns to show by defining a list of dicts:
+                                    {scheme: category scheme,
+                                     n: maximum number of suggestions to include for this scheme,
+                                     order_by: How to order suggestions from a scheme.  'confidence' will order in
+                                               descending confidence value.  None will be in order on transaction obj,
+                                    }
 
     Returns:
         (pd.DataFrame):
@@ -74,13 +98,25 @@ def load_data(n_suggested_categories=1):
         else:
             d[CATEGORY] = None
 
-        for i in range(n_suggested_categories):
-            try:
-                d[f'{SUGGESTED_CATEGORY_PREFIX}_{i}'] = trx.categories_suggested[i].category
-                d[f'{SUGGESTED_CATEGORY_PREFIX}_{i}{CATEGORY_ID_SUFFIX}'] = trx.categories_suggested[i].id
-            except IndexError:
-                d[f'{SUGGESTED_CATEGORY_PREFIX}_{i}'] = None
-                d[f'{SUGGESTED_CATEGORY_PREFIX}_{i}{CATEGORY_ID_SUFFIX}'] = None
+        for suggested_spec in suggested_columns:
+            scheme = suggested_spec['scheme']
+            n_max = suggested_spec['n']
+
+            # Get suggestions within this scheme
+            categories_suggested = [category for category in trx.categories_suggested if category.scheme == scheme]
+
+            if suggested_spec['order_by'] is None:
+                pass
+            elif suggested_spec['order_by'] == 'confidence':
+                raise NotImplementedError("SORT BY CONFIDENCE!")
+
+            for i in range(n_max):
+                try:
+                    d[f'{SUGGESTED_CATEGORY_PREFIX}_{scheme}_{i}'] = categories_suggested[i].category
+                    d[f'{SUGGESTED_CATEGORY_PREFIX}_{scheme}_{i}{CATEGORY_ID_SUFFIX}'] = categories_suggested[i].id
+                except IndexError:
+                    d[f'{SUGGESTED_CATEGORY_PREFIX}_{scheme}_{i}'] = None
+                    d[f'{SUGGESTED_CATEGORY_PREFIX}_{scheme}_{i}{CATEGORY_ID_SUFFIX}'] = None
 
         return d
 
@@ -106,7 +142,7 @@ def get_app_layout():
         dash_table.DataTable(
             id='transaction-table',
             columns=define_columns(columns=COLUMNS_TO_SHOW, editable=COLUMNS_TO_EDIT),
-            data=load_data().to_dict('records'),
+            data=load_data(SUGGESTED_COLUMN_SPECS).to_dict('records'),
             editable=True,
             # Set dropdowns within columns by dict
             dropdown=COLUMN_DROPDOWNS,
@@ -163,7 +199,7 @@ def table_data_update_dispatcher(data_timestamp, active_cell, data, data_previou
     # These are logic branches that can result in edited data.  If we want them to trigger the later "on-edit" callback,
     # raise the data_edited flag
     if ctx.triggered[0]["prop_id"].endswith(".active_cell"):
-        returned = accept_category_on_click_via_active_cell(active_cell, data, COLUMNS_CLICKABLE_MAP)
+        returned = accept_category_on_click_via_active_cell(active_cell, data, SUGGESTED_COLUMNS_TO_WATCH)
         if returned:
             data, data_previous, data_edited = returned
         else:
