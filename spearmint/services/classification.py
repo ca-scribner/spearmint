@@ -2,14 +2,14 @@ import click
 
 from spearmint.classifiers.lookup_classifier import LookupClassifier
 from spearmint.data.db_session import create_session, global_init
-from spearmint.services.transaction import get_transactions_without_category, get_all_transactions
+from spearmint.services.transaction import get_transactions_without_category, get_transactions
 
 
 def classify_db_by_lookup(label_file, classify_if_not_null=False):
     clf = LookupClassifier.from_csv(label_file)
 
     if classify_if_not_null:
-        trxs = get_all_transactions()
+        trxs = get_transactions()
     else:
         trxs = get_transactions_without_category()
     
