@@ -15,7 +15,7 @@ from spearmint.dashboard.diff_dashtable import diff_dashtable
 from spearmint.data.db_session import global_init
 from spearmint.data.transaction import Transaction
 from spearmint.services.budget import get_expense_budget_collection
-from spearmint.services.transaction import get_all_transactions
+from spearmint.services.transaction import get_transactions
 
 
 SUGGESTED_CATEGORY_PREFIX = "suggested category"
@@ -87,7 +87,7 @@ def load_data(suggested_columns=tuple()):
         (pd.DataFrame):
     """
     # df = get_all_transactions('df')
-    trxs = get_all_transactions()
+    trxs = get_transactions()
 
     def trx_to_dict(trx: Transaction):
         # TODO: Sync these with globals above for shown columns

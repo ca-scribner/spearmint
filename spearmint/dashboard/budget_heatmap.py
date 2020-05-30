@@ -15,7 +15,7 @@ from spearmint.dashboard.utils import get_rounded_z_range_including_mid, make_ce
 from spearmint.data.db_session import global_init
 from spearmint.data_structures.budget import BudgetCollection
 from spearmint.services.budget import get_expense_budget_collection
-from spearmint.services.transaction import get_all_transactions, get_unique_transaction_categories_as_string
+from spearmint.services.transaction import get_transactions, get_unique_transaction_categories_as_string
 
 MOVING_AVERAGE_SLIDER_TICKS = [1, 2, 3, 6, 12]
 ANNOTATION_ARGS = dict(
@@ -399,7 +399,7 @@ def get_date_picker():
     # Is there a better way to do this where I don't need a separate data access step purely for the date_picker?
     # Wasn't sure how to make a date picker placeholder then update it later.  Maybe I can store it globally and change
     # its properties later?
-    df = get_all_transactions('df')
+    df = get_transactions('df')
     start_date = df[DATETIME_COLUMN].min()
     end_date = df[DATETIME_COLUMN].max()
 
@@ -516,7 +516,7 @@ def update_heatmap(start_date, end_date, ma, sidebar_ul_children):
         # "show" the invisible figure by returning a style {display == block}
         return div_style, fig
 
-    df = get_all_transactions('df')
+    df = get_transactions('df')
 
     # Make a subset of the overall Budget definition for only these children
     bc_subset = BUDGET_COLLECTION.slice_by_budgets(budgets_to_show)
@@ -567,7 +567,7 @@ def update_barchart(clickData, start_date, end_date, moving_average_window):
         return div_style, fig
 
 
-    df = get_all_transactions('df').copy()
+    df = get_transactions('df').copy()
 
     # budget_name is first point clicked's (click only returns one) y attribute
     budget_name = clickData["points"][0]['y']

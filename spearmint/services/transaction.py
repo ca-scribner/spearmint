@@ -81,6 +81,10 @@ def get_transactions_without_category() -> List[Transaction]:
     return transactions
 
 
+def get_transactions_with_category(return_type='list', lazy=False) -> List[Transaction]:
+    return get_transactions(return_type=return_type, lazy=lazy, filters=(Transaction.category.has(),))
+
+
 def get_transaction_by_id(transaction_id) -> Transaction:
     s = create_session()
     trx = s.query(Transaction).filter(Transaction.id == transaction_id).first()
@@ -115,9 +119,11 @@ def get_unique_transaction_categories_as_string(category_type='all') -> List[str
     return categories
 
 
-def get_all_transactions(return_type='list', lazy=False) -> List[Transaction]:
+def get_transactions(return_type='list', lazy=False, filters=tuple()) -> List[Transaction]:
     """
     Returns all transactions as specified type
+
+    # TODO: Consolidate other get's to this one?
 
     Args:
         return_type (str): One of:
@@ -125,12 +131,15 @@ def get_all_transactions(return_type='list', lazy=False) -> List[Transaction]:
                             df: returns as pd.DataFrame with one row per transaction and all attributes as columns
         lazy (bool): If True, lazily load transactions (thus information about linked categories will not be available).
                      If False, eagerly load the category objects as well using joinedload
+        filters: Iterable of arguments to pass to query.filter, such as (ransaction.category.is_(None),)
 
     Returns:
         See return_type
     """
     s = create_session()
     q = s.query(Transaction)
+    for f in filters:
+        q = q.filter(f)
     if not lazy:
         q = q.options(
             joinedload(Transaction.category),
@@ -144,7 +153,6 @@ def get_all_transactions(return_type='list', lazy=False) -> List[Transaction]:
     if return_type == 'list':
         pass
     elif return_type == 'df':
-        print("WARNING: transactions as df not tested after moving categories to category table.  Behaviour unknown")
         trxs = transactions_to_dataframe(trxs)
     else:
         raise ValueError(f"Invalid return_type {return_type}")
@@ -152,13 +160,16 @@ def get_all_transactions(return_type='list', lazy=False) -> List[Transaction]:
 
 
 def transactions_to_dataframe(transactions: List[Transaction]) -> pd.DataFrame:
-    trxs_as_dicts = [sa_obj_as_dict(trx) for trx in transactions]
+    print("WARNING: transactions as df not tested after moving categories to category table.  Behaviour unknown")
+
+    trxs_as_dicts = [_sa_obj_as_dict(trx) for trx in transactions]
+
     df = pd.DataFrame(trxs_as_dicts)
     return df
 
 
 # Helpers
-def sa_obj_as_dict(sa_obj):
+def _sa_obj_as_dict(sa_obj, include_category_relationships=True):
     """
     Converts a SqlAlchemy object (eg: a row of a table from SqlAlchemy) to a dict
 
@@ -166,12 +177,23 @@ def sa_obj_as_dict(sa_obj):
 
     Args:
         sa_obj: SqlAlchemy object
+        include_category_relationships (bool): If True, will also try to add entries for relationships which have a
+                                               .category attribute (used for category and suggested category)
 
     Returns:
         (dict)
     """
-    return {c.key: getattr(sa_obj, c.key)
-            for c in inspect(sa_obj).mapper.column_attrs}
+    inspected = inspect(sa_obj)
+    d = {c.key: getattr(sa_obj, c.key) for c in inspected.mapper.column_attrs}
+
+    if include_category_relationships:
+        for k in inspected.mapper.relationships:
+            try:
+                d[k.key] = getattr(getattr(sa_obj, k.key), 'category')
+            except AttributeError:
+                pass
+
+    return d
 
 
 def get_sa_obj_keys(sa_obj):
