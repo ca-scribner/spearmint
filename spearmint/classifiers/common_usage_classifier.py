@@ -29,6 +29,9 @@ class CommonUsageClassifier:
         self._df = get_most_frequent_as_df(df_temp, FEATURE, LABEL)
 
     def predict(self, x, n=1):
+        # Handle NA
+        # Handle x not in df
+
         if n:
             # Get the first n columns, but pad in case we have <n
             df_padded = pad_df(df=self._df, columns=range(n), pad_with=np.nan, inplace=False)
@@ -37,19 +40,18 @@ class CommonUsageClassifier:
             df_padded = self._df
             columns_to_return = df_padded.columns
 
-        # Select the rows to return by using the input feature x as the index on columns_to_return
-        predicted = df_padded.loc[x, columns_to_return]
-
-        # Is this helpful?  Had it before...
-        # # Convert nan to None
-        # predicted = predicted.where(pd.notnull(predicted), None)
+        # Build the return by using reindex, which is like doing df.loc[indices_to_select] but for any index in
+        # indices_to_select but not in df it fills NaN into all columns
+        predicted = df_padded.reindex(x)[columns_to_return]
 
         return predicted
 
     @classmethod
-    def from_db(cls, db_file, feature_column='description', label_column='category'):
+    def from_db(cls, db_file=None, feature_column='description', label_column='category'):
         """
         Returns a classifier fitted to the records in db_file
+
+        This feels a bit too single-purpose and more like a service, but putting it here makes things easy for now...
 
         Args:
             db_file (str): Path to a database file
@@ -59,7 +61,9 @@ class CommonUsageClassifier:
         Returns:
             Fitted CommonUsageClassifier
         """
-        global_init(db_file, echo=False)
+        if db_file:
+            global_init(db_file, echo=False)
+        # Else we assume the db is initialized
         df = get_transactions_with_category(return_type='df')
         clf = cls()
         clf.fit(df[feature_column], df[label_column])
