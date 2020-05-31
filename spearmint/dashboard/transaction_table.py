@@ -21,6 +21,8 @@ SUGGESTED_CATEGORY_PREFIX = "(S)"
 CATEGORY = "category"
 CATEGORY_ID_SUFFIX = " id"
 CATEGORY_ID = CATEGORY + CATEGORY_ID_SUFFIX
+DATETIME = "datetime"
+DESCRIPTION = "description"
 
 # Column to keep track of any edits in the table
 CHANGED_COLUMN = "__changed"
@@ -165,6 +167,9 @@ def load_data(suggested_columns=tuple()):
     trxs_as_dicts = [trx_to_dict(trx) for trx in trxs]
     df = pd.DataFrame(trxs_as_dicts)
 
+    # Reformat dates to nicer display
+    df[DATETIME] = pd.DatetimeIndex(df[DATETIME]).strftime("%Y-%m-%d")
+
     for c in ADDITIONAL_COLUMNS_TO_SHOW + COLUMNS_TO_HIDE:
         if c in df:
             raise ValueError(f"Column {c} already exists!  Cannot add hidden column that overlaps with main data")
@@ -173,26 +178,113 @@ def load_data(suggested_columns=tuple()):
     return df
 
 
+def get_conditional_styles():
+    # Styling priority, from highest to lowest (from https://dash.plotly.com/datatable/style)
+    #     1. style_data_conditional
+    #     2. style_data
+    #     3. style_filter_conditional
+    #     4. style_filter
+    #     5. style_header_conditional  # header = only header
+    #     6. style_header
+    #     7. style_cell_conditional  # cell = header and data
+    #     8. style_cell
+    #
+    # From https://dash.plotly.com/datatable/style
+    #     Notice the three different groups you can style: "cell" is the whole table, "header" is just the header rows,
+    #     and "data" is just the data rows. To use even/odd or other styling based on row_index you must use
+    #     style_data_conditional.
+
+    style_cell_conditional = []
+    style_data_conditional = []
+    style_filter_conditional = []
+    style_header_conditional = []
+
+    # Styling for editable
+    style_data_conditional.append({
+        "if": {"column_editable": True},
+        "backgroundColor": "rgb(96, 190, 247)",
+    })
+    style_header_conditional.append({
+        "if": {"column_editable": True},
+        "backgroundColor": "rgb(96, 190, 247)",
+    })
+
+    # Color if category column is empty
+    style_data_conditional.append(
+        {
+            "if": {
+                "filter_query": f"{{{CATEGORY}}} is blank",
+                "column_id": CATEGORY,
+            },
+            "backgroundColor": "rgb(255, 0, 0)",
+
+        }
+    )
+
+
+    # Styling for clickable columns
+    for c in SUGGESTED_COLUMNS_TO_WATCH_FOR_ON_CLICK:
+        style_data_conditional.append(
+            {
+                "if": {"column_id": c},
+                "backgroundColor": "rgb(195, 247, 188)",
+                'border': '1px solid blue'
+            }
+        )
+
+    # Style any editable column that has changed
+    for c in COLUMNS_TO_EDIT:
+        style_data_conditional.append(
+            {
+                "if": {
+                    "filter_query": f"{{{CHANGED_COLUMN}}} contains {CHANGED_PAD_START}{c}{CHANGED_PAD_END}",
+                    "column_id": c,
+                },
+                "backgroundColor": "rgb(250, 140, 0)",
+            }
+        )
+
+    # Not sure why, but this only worked after the DataTable's style_cell had
+    # {"overflow": "hidden", "textOverflow": "ellipsis", "maxWidth": 50},
+    # style_cell_conditional.append(
+    #     {"if": {"column_id": "id"},
+    #      "width": "50%",
+    #      }
+    # )
+
+
+    return {
+        'style_data_conditional': style_data_conditional,
+        'style_filter_conditional': style_filter_conditional,
+        'style_header_conditional': style_header_conditional,
+        'style_cell_conditional': style_cell_conditional,
+    }
+
+
 def get_app_layout():
+    data = load_data(SUGGESTED_COLUMN_SPECS)
     children = [
         html.H1("Transaction Table"),
         dash_table.DataTable(
             id='transaction-table',
             columns=define_columns(columns=COLUMNS_TO_SHOW, editable=COLUMNS_TO_EDIT),
-            data=load_data(SUGGESTED_COLUMN_SPECS).to_dict('records'),
+            data=data.to_dict('records'),
             editable=True,
             # Set dropdowns within columns by dict
             dropdown=COLUMN_DROPDOWNS,
+            # style_cell={"textOverflow": "ellipsis"},
+            # style_cell={'whiteSpace': 'normal', "textOverflow": "ellipsis",
+            #             "minWidth": "5px", "width": "10px", "maxWidth": "1500px", "table-layout": "fixed"},
+            tooltip_data=[
+                {
+                    column: {'value': str(value), 'type': 'markdown'}
+                    for column, value in row.items()
+                } for row in data.to_dict('rows')
+            ],
+            style_cell={"overflow": "hidden", "textOverflow": "ellipsis", "maxWidth": 300},
+            style_header={"whiteSpace": "normal", "height": "auto"},
             style_table={'height': '90vh', 'overflowY': 'auto'},
-            # style_data_conditional=[
-            #     {
-            #         "if": {
-            #             "filter_query": f"{{{CHANGED_COLUMN}}} contains {CHANGED_PAD_END}Description{CHANGED_PAD_END}",
-            #             "column_id": "Description",
-            #         },
-            #         "backgroundColor": "rgb(240, 240, 240)",
-            #     }
-            # ]
+            **get_conditional_styles()
         ),
         html.Div(id='sink1'),
     ]
