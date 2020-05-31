@@ -14,13 +14,12 @@ import dash_table
 from spearmint.dashboard.diff_dashtable import diff_dashtable
 from spearmint.data.db_session import global_init
 from spearmint.data.transaction import Transaction
-from spearmint.services.budget import get_expense_budget_collection
 from spearmint.services.transaction import get_transactions
 
 
-SUGGESTED_CATEGORY_PREFIX = "suggested category"
+SUGGESTED_CATEGORY_PREFIX = "(S)"
 CATEGORY = "category"
-CATEGORY_ID_SUFFIX = "_id"
+CATEGORY_ID_SUFFIX = " id"
 CATEGORY_ID = CATEGORY + CATEGORY_ID_SUFFIX
 
 # Column to keep track of any edits in the table
@@ -31,22 +30,65 @@ CHANGED_COLUMN = "__changed"
 CHANGED_PAD_START = "__"
 CHANGED_PAD_END = "__"
 
-# Specs for suggested colums.
-# TODO: Consolidate with other suggested defs
-def get_suggested_columns(spec):
-    to_return = []
-    for i in range(spec['n']):
-        to_return.extend((f"{spec['name']}_{i}", f"{spec['name']}_{i}{CATEGORY_ID_SUFFIX}"))
-    return to_return
+
+# TODO: Simplify the suggested category naming stuff once we're done debugging
+def get_suggested_column_name(spec, i=None):
+    if i is None:
+        suffix = ""
+    else:
+        suffix = f" {i}"
+    return f"{spec['name']}{suffix}"
+
+
+def get_suggested_column_names(spec, id_suffix=None):
+    if id_suffix is None:
+        suffix = ""
+    else:
+        suffix = f"{id_suffix}"
+
+    if spec["n"] == 1:
+        column_indices = [None]
+    else:
+        column_indices = range(spec["n"])
+
+    return [f"{get_suggested_column_name(spec, i)}{suffix}" for i in column_indices]
+
+
+def get_suggested_column_names_with_id_interleaved(spec, id_suffix):
+    """
+    Returns an interleaved list of suggested column names for this spec without and with ID
+
+    For example:
+        get_suggested_column_names_with_id_interleaved(
+            spec={'name': 'suggested_from_file', 'scheme': 'from_file', 'n': 2},
+            id_suffix="_id"
+        )
+        # returns:
+        # ["suggested_from_file 0", "suggested_from_file 0_id", "suggested_from_file 1", "suggested_from_file 1_id"]
+    """
+    return interleave(get_suggested_column_names(spec), get_suggested_column_names(spec, id_suffix=id_suffix))
+
+
+def interleave(l1, l2):
+    return list(itertools.chain(*zip(l1, l2)))
+
+
+def flatten(lst):
+    return list(itertools.chain(*lst))
+
 
 SUGGESTED_COLUMN_SPECS = [
-    {'name': f'{SUGGESTED_CATEGORY_PREFIX}_from_file', 'scheme': 'from_file', 'n': 1, 'order_by': None},
-    {'name': f'{SUGGESTED_CATEGORY_PREFIX}_from_clf', 'scheme': 'from_clf', 'n': 2, 'order_by': None},
+    {'name': f'{SUGGESTED_CATEGORY_PREFIX} from_file', 'scheme': 'from_file', 'n': 1, 'order_by': None},
+    {'name': f'{SUGGESTED_CATEGORY_PREFIX} most_common', 'scheme': 'most_common', 'n': 2, 'order_by': None},
+    {'name': f'{SUGGESTED_CATEGORY_PREFIX} clf', 'scheme': 'clf', 'n': 1, 'order_by': None},
 ]
-# TODO: Simplify this expansion
-SUGGESTED_COLUMNS_TO_SHOW = list(itertools.chain(*[get_suggested_columns(spec) for spec in SUGGESTED_COLUMN_SPECS]))
 
-SUGGESTED_COLUMNS_TO_WATCH = [c for c in SUGGESTED_COLUMNS_TO_SHOW if not c.endswith(CATEGORY_ID_SUFFIX)]
+# DEBUG: Include column IDs by interleaving them in the list
+SUGGESTED_COLUMNS_TO_SHOW = [get_suggested_column_names_with_id_interleaved(spec=spec, id_suffix=CATEGORY_ID_SUFFIX)
+                             for spec in SUGGESTED_COLUMN_SPECS]
+SUGGESTED_COLUMNS_TO_SHOW = flatten(SUGGESTED_COLUMNS_TO_SHOW)
+
+SUGGESTED_COLUMNS_TO_WATCH_FOR_ON_CLICK = [c for c in SUGGESTED_COLUMNS_TO_SHOW if not c.endswith(CATEGORY_ID_SUFFIX)]
 
 COLUMNS_TO_SHOW_FROM_DATA = ['id', 'datetime', 'amount', CATEGORY, CATEGORY_ID, 'description'] + \
                             SUGGESTED_COLUMNS_TO_SHOW
@@ -60,8 +102,6 @@ COLUMN_DROPDOWNS = {
 }
 COLUMNS_TO_HIDE = [CHANGED_COLUMN]
 COLUMNS_TO_SHOW = COLUMNS_TO_SHOW_FROM_DATA + ADDITIONAL_COLUMNS_TO_SHOW + COLUMNS_TO_HIDE
-
-
 
 
 app = dash.Dash(__name__)
@@ -100,7 +140,6 @@ def load_data(suggested_columns=tuple()):
 
         for suggested_spec in suggested_columns:
             scheme = suggested_spec['scheme']
-            n_max = suggested_spec['n']
 
             # Get suggestions within this scheme
             categories_suggested = [category for category in trx.categories_suggested if category.scheme == scheme]
@@ -110,13 +149,16 @@ def load_data(suggested_columns=tuple()):
             elif suggested_spec['order_by'] == 'confidence':
                 raise NotImplementedError("SORT BY CONFIDENCE!")
 
-            for i in range(n_max):
+            suggested_names = get_suggested_column_names(suggested_spec)
+            suggested_names_with_id = get_suggested_column_names(suggested_spec, CATEGORY_ID_SUFFIX)
+
+            for i, (name, name_with_id) in enumerate(zip(suggested_names, suggested_names_with_id)):
                 try:
-                    d[f'{SUGGESTED_CATEGORY_PREFIX}_{scheme}_{i}'] = categories_suggested[i].category
-                    d[f'{SUGGESTED_CATEGORY_PREFIX}_{scheme}_{i}{CATEGORY_ID_SUFFIX}'] = categories_suggested[i].id
+                    d[name] = categories_suggested[i].category
+                    d[name_with_id] = categories_suggested[i].id
                 except IndexError:
-                    d[f'{SUGGESTED_CATEGORY_PREFIX}_{scheme}_{i}'] = None
-                    d[f'{SUGGESTED_CATEGORY_PREFIX}_{scheme}_{i}{CATEGORY_ID_SUFFIX}'] = None
+                    d[name] = None
+                    d[name_with_id] = None
 
         return d
 
@@ -127,11 +169,6 @@ def load_data(suggested_columns=tuple()):
         if c in df:
             raise ValueError(f"Column {c} already exists!  Cannot add hidden column that overlaps with main data")
         df[c] = None
-
-    # TODO: things like populate suggestions via ML!  Or just randomly create them...
-    # possible_categories = pd.unique(df['category'])
-    # np.random.seed(42)
-    # df['suggested category'] = np.random.choice(possible_categories, len(df))
 
     return df
 
@@ -199,7 +236,7 @@ def table_data_update_dispatcher(data_timestamp, active_cell, data, data_previou
     # These are logic branches that can result in edited data.  If we want them to trigger the later "on-edit" callback,
     # raise the data_edited flag
     if ctx.triggered[0]["prop_id"].endswith(".active_cell"):
-        returned = accept_category_on_click_via_active_cell(active_cell, data, SUGGESTED_COLUMNS_TO_WATCH)
+        returned = accept_category_on_click_via_active_cell(active_cell, data, SUGGESTED_COLUMNS_TO_WATCH_FOR_ON_CLICK)
         if returned:
             data, data_previous, data_edited = returned
         else:

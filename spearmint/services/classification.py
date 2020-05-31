@@ -10,7 +10,7 @@ from spearmint.services.transaction import get_transactions_without_category, ge
     transactions_to_dataframe
 
 
-def classify_by_most_common(scheme="most_common", if_scheme_exists="replace", n_classifications_per_trx=3):
+def classify_by_most_common(scheme, if_scheme_exists="replace", n_classifications_per_trx=3):
     """
     Adds suggested categories to all transactions in database under scheme name scheme
 
