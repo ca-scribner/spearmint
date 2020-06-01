@@ -85,12 +85,13 @@ SUGGESTED_COLUMN_SPECS = [
     {'name': f'{SUGGESTED_CATEGORY_PREFIX} clf', 'scheme': 'clf', 'n': 1, 'order_by': None},
 ]
 
-# DEBUG: Include column IDs by interleaving them in the list
-SUGGESTED_COLUMNS_TO_SHOW = [get_suggested_column_names_with_id_interleaved(spec=spec, id_suffix=CATEGORY_ID_SUFFIX)
-                             for spec in SUGGESTED_COLUMN_SPECS]
-SUGGESTED_COLUMNS_TO_SHOW = flatten(SUGGESTED_COLUMNS_TO_SHOW)
+# SUGGESTED_COLUMNS_TO_SHOW = [get_suggested_column_names_with_id_interleaved(spec=spec, id_suffix=CATEGORY_ID_SUFFIX)
+#                              for spec in SUGGESTED_COLUMN_SPECS]
+SUGGESTED_COLUMNS_TO_SHOW = flatten([get_suggested_column_names(spec=spec)
+                                     for spec in SUGGESTED_COLUMN_SPECS])
 
-SUGGESTED_COLUMNS_TO_WATCH_FOR_ON_CLICK = [c for c in SUGGESTED_COLUMNS_TO_SHOW if not c.endswith(CATEGORY_ID_SUFFIX)]
+SUGGESTED_COLUMNS_TO_WATCH_FOR_ON_CLICK = flatten([get_suggested_column_names(spec=spec)
+                                                   for spec in SUGGESTED_COLUMN_SPECS])
 
 COLUMNS_TO_SHOW_FROM_DATA = ['id', 'datetime', 'amount', CATEGORY, CATEGORY_ID, 'description'] + \
                             SUGGESTED_COLUMNS_TO_SHOW
@@ -284,7 +285,11 @@ def get_app_layout():
             style_cell={"overflow": "hidden", "textOverflow": "ellipsis", "maxWidth": 300},
             style_header={"whiteSpace": "normal", "height": "auto"},
             style_table={'height': '90vh', 'overflowY': 'auto'},
-            **get_conditional_styles()
+            **get_conditional_styles(),
+            filter_action="native",
+            sort_action="native",
+            sort_mode="multi",
+            # row_selectable="multi",  # Can I use this to indicate changes cleanly and only pass rows that need change?
         ),
         html.Div(id='sink1'),
     ]
@@ -401,29 +406,41 @@ def accept_category_on_click_via_active_cell(active_cell, rows, columns_to_watch
 
     # If I click on a column that is clickable, (eg suggestion X), put that value into a different column (eg category)
     if active_cell['column_id'] in columns_to_watch:
+        this_row = _get_active_row(active_cell, rows)
+
         source_column = active_cell['column_id']
         source_id_column = active_cell['column_id'] + CATEGORY_ID_SUFFIX
 
         # If cell is empty, ignore (we only overwrite if there is content to overwrite with)
-        if not rows[active_cell['row']][source_column]:
+        if not this_row[source_column]:
             return None
 
         target_column = CATEGORY
         target_id_column = CATEGORY_ID
 
         # Check if destination already has this content
-        if rows[active_cell['row']][target_column] == rows[active_cell['row']][source_column] or \
-           rows[active_cell['row']][target_id_column] == rows[active_cell['row']][source_id_column]:
+        if this_row[target_column] == this_row[source_column] or \
+           this_row[target_id_column] == this_row[source_id_column]:
             return None
         else:
             # Make a deep copy of rows so we can later compare data to data_previous
             rows_previous = copy.deepcopy(rows)
-            rows[active_cell['row']][target_column] = rows[active_cell['row']][source_column]
-            rows[active_cell['row']][target_id_column] = rows[active_cell['row']][source_id_column]
+            this_row[target_column] = this_row[source_column]
+            this_row[target_id_column] = this_row[source_id_column]
             return rows, rows_previous, True
 
     # No edits
     return None
+
+
+def _get_active_row(active_cell, rows):
+    # Get the row we're working on by finding the correct row_id (nomenclature is id in the data, but row_id in
+    # active_cell)
+    # Use a generator expression to yield the first matching element
+    this_row = next((d for d in rows if d['id'] == active_cell['row_id']), None)
+    if this_row == None:
+        raise ValueError("Cannot find active row")
+    return this_row
 
 
 # CLI
