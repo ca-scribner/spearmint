@@ -10,6 +10,8 @@ import dash_html_components as html
 import dash_core_components as dcc
 from dash.dependencies import State, Input, Output
 import dash_table
+from flask import send_from_directory, send_file
+
 
 from spearmint.dashboard.diff_dashtable import diff_dashtable
 from spearmint.data.db_session import global_init
@@ -25,7 +27,10 @@ DATETIME = "datetime"
 DESCRIPTION = "description"
 RELOAD_BUTTON = "reload-data-button"
 RELOAD_BUTTON_CONFIRM = "reload-data-button-confirm"
+SAVE_TO_DB_BUTTON = "save-to-db-button"
+SAVE_TO_DB_BUTTON_CONFIRM = "save-to-db-button-confirm"
 TRANSACTION_TABLE = "transaction-table"
+DOWNLOAD_DB_BUTTON = "download-db-button"
 
 # Column to keep track of any edits in the table
 CHANGED_COLUMN = "__changed"
@@ -265,13 +270,19 @@ def get_conditional_styles():
     }
 
 
-def get_app_layout():
+def get_app_layout(db_file):
     data = load_data(SUGGESTED_COLUMN_SPECS)
     children = [
         html.H1("Transaction Table"),
-        html.Div(
-            html.Button("Reload Data", id=RELOAD_BUTTON)
-        ),
+        html.Div([
+            html.Button("Reload Data", id=RELOAD_BUTTON),
+            dcc.ConfirmDialogProvider(
+                children=html.Button("Save Changes to DB"),
+                id=SAVE_TO_DB_BUTTON_CONFIRM,
+                message="Are you sure you want to save changes to the database?"
+            ),
+            html.Button("Download DB", id=DOWNLOAD_DB_BUTTON)
+        ]),
         dash_table.DataTable(
             id=TRANSACTION_TABLE,
             columns=define_columns(columns=COLUMNS_TO_SHOW, editable=COLUMNS_TO_EDIT),
@@ -299,7 +310,11 @@ def get_app_layout():
                 dcc.ConfirmDialog(
                     id=RELOAD_BUTTON_CONFIRM,
                     message="Unsaved changes detected - are you sure you want to reload from the database?"
-                )
+                ),
+                html.Div(
+                    id="db-file",
+                    children=db_file,
+                ),
             ],
             style={'display': 'none'}
         ),
@@ -333,16 +348,34 @@ def reload_button(n_clicks, data):
 
 
 @app.callback(
+    Output(DOWNLOAD_DB_BUTTON, "style"),
+    [
+        Input(DOWNLOAD_DB_BUTTON, "n_clicks"),
+    ],
+    [
+        State("db-file", "children")
+    ]
+)
+def download_db(n_clicks, db_file):
+    if n_clicks:
+        print("TODO: Download db!")
+        send_file(db_file, as_attachment=True)
+    raise dash.exceptions.PreventUpdate("Never updates")
+
+
+@app.callback(
     Output(TRANSACTION_TABLE, "data"),
     [Input(TRANSACTION_TABLE, "data_timestamp"),
      Input(TRANSACTION_TABLE, "active_cell"),
-     Input(RELOAD_BUTTON_CONFIRM, "submit_n_clicks")
+     Input(RELOAD_BUTTON_CONFIRM, "submit_n_clicks"),
+     Input(SAVE_TO_DB_BUTTON_CONFIRM, "submit_n_clicks"),
      ],
     [State(TRANSACTION_TABLE, "data"),
      State(TRANSACTION_TABLE, "data_previous"),
      ]
 )
-def table_data_update_dispatcher(data_timestamp, active_cell, reload_button_hidden_div, data, data_previous):
+def table_data_update_dispatcher(data_timestamp, active_cell, reload_button_confirm, save_to_db_button_confirm, data,
+                                 data_previous):
     """
     This callback wraps all actions that will result in the table data being output
 
@@ -360,6 +393,13 @@ def table_data_update_dispatcher(data_timestamp, active_cell, reload_button_hidd
 
     # If we have a Refresh Data button callback, reload the data from the db and exit
     if RELOAD_BUTTON_CONFIRM in ctx.triggered[0]["prop_id"]:
+        return load_data(SUGGESTED_COLUMN_SPECS).to_dict("records")
+
+    # Save changes to db, clear the changes, and exit
+    if SAVE_TO_DB_BUTTON_CONFIRM in ctx.triggered[0]["prop_id"]:
+        print(f"TODO: SAVE TO DB")
+
+        # Reload new db data
         return load_data(SUGGESTED_COLUMN_SPECS).to_dict("records")
 
     data_edited = False
@@ -511,7 +551,7 @@ if __name__ == '__main__':
     args = parse_args()
     global_init(args.db, echo=True)
 
-    app.layout = get_app_layout()
+    app.layout = get_app_layout(db_file=args.db)
     ports = range(8850, 8860, 1)
     for port in ports:
         try:
