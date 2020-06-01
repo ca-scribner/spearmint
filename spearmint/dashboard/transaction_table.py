@@ -82,7 +82,7 @@ def flatten(lst):
 SUGGESTED_COLUMN_SPECS = [
     {'name': f'{SUGGESTED_CATEGORY_PREFIX} from_file', 'scheme': 'from_file', 'n': 1, 'order_by': None},
     {'name': f'{SUGGESTED_CATEGORY_PREFIX} most_common', 'scheme': 'most_common', 'n': 2, 'order_by': None},
-    {'name': f'{SUGGESTED_CATEGORY_PREFIX} clf', 'scheme': 'clf', 'n': 1, 'order_by': None},
+    # {'name': f'{SUGGESTED_CATEGORY_PREFIX} clf', 'scheme': 'clf', 'n': 1, 'order_by': None},
 ]
 
 # SUGGESTED_COLUMNS_TO_SHOW = [get_suggested_column_names_with_id_interleaved(spec=spec, id_suffix=CATEGORY_ID_SUFFIX)
