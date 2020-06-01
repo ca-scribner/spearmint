@@ -23,6 +23,9 @@ CATEGORY_ID_SUFFIX = " id"
 CATEGORY_ID = CATEGORY + CATEGORY_ID_SUFFIX
 DATETIME = "datetime"
 DESCRIPTION = "description"
+RELOAD_BUTTON = "reload-data-button"
+RELOAD_BUTTON_CONFIRM = "reload-data-button-confirm"
+TRANSACTION_TABLE = "transaction-table"
 
 # Column to keep track of any edits in the table
 CHANGED_COLUMN = "__changed"
@@ -266,8 +269,11 @@ def get_app_layout():
     data = load_data(SUGGESTED_COLUMN_SPECS)
     children = [
         html.H1("Transaction Table"),
+        html.Div(
+            html.Button("Reload Data", id=RELOAD_BUTTON)
+        ),
         dash_table.DataTable(
-            id='transaction-table',
+            id=TRANSACTION_TABLE,
             columns=define_columns(columns=COLUMNS_TO_SHOW, editable=COLUMNS_TO_EDIT),
             data=data.to_dict('records'),
             editable=True,
@@ -276,38 +282,67 @@ def get_app_layout():
             # style_cell={"textOverflow": "ellipsis"},
             # style_cell={'whiteSpace': 'normal', "textOverflow": "ellipsis",
             #             "minWidth": "5px", "width": "10px", "maxWidth": "1500px", "table-layout": "fixed"},
-            tooltip_data=[
-                {
-                    column: {'value': str(value), 'type': 'markdown'}
-                    for column, value in row.items()
-                } for row in data.to_dict('rows')
-            ],
+            tooltip_data=get_tooltip_data(data),
             style_cell={"overflow": "hidden", "textOverflow": "ellipsis", "maxWidth": 300},
             style_header={"whiteSpace": "normal", "height": "auto"},
-            style_table={'height': '90vh', 'overflowY': 'auto'},
+            style_table={'height': '85vh', 'overflowY': 'auto'},
             **get_conditional_styles(),
             filter_action="native",
             sort_action="native",
             sort_mode="multi",
             # row_selectable="multi",  # Can I use this to indicate changes cleanly and only pass rows that need change?
         ),
-        html.Div(id='sink1'),
+        # Intermediate trigger if reload button confirmed
+        html.Div(
+            id="hidden_stuff",
+            children=[
+                dcc.ConfirmDialog(
+                    id=RELOAD_BUTTON_CONFIRM,
+                    message="Unsaved changes detected - are you sure you want to reload from the database?"
+                )
+            ],
+            style={'display': 'none'}
+        ),
     ]
 
     return html.Div(children)
 
 
+def get_tooltip_data(data):
+    return [
+        {
+            column: {'value': str(value), 'type': 'markdown'}
+            for column, value in row.items() if column == DESCRIPTION
+        } for row in data.to_dict('rows')
+    ]
+
+
 # Callbacks
 @app.callback(
-    Output("transaction-table", "data"),
-    [Input("transaction-table", "data_timestamp"),
-     Input("transaction-table", "active_cell"),
+    Output(RELOAD_BUTTON_CONFIRM, "displayed"),
+    [
+        Input(RELOAD_BUTTON, "n_clicks"),
+    ],
+    [
+        State(TRANSACTION_TABLE, "data"),
+    ]
+)
+def reload_button(n_clicks, data):
+    changed_rows = _get_changed_rows(data)
+    return len(changed_rows) > 0
+
+
+@app.callback(
+    Output(TRANSACTION_TABLE, "data"),
+    [Input(TRANSACTION_TABLE, "data_timestamp"),
+     Input(TRANSACTION_TABLE, "active_cell"),
+     Input(RELOAD_BUTTON_CONFIRM, "submit_n_clicks")
      ],
-    [State("transaction-table", "data"),
-     State("transaction-table", "data_previous"),
+    [State(TRANSACTION_TABLE, "data"),
+     State(TRANSACTION_TABLE, "data_previous"),
      ]
 )
-def table_data_update_dispatcher(data_timestamp, active_cell, data, data_previous):
+def table_data_update_dispatcher(data_timestamp, active_cell, reload_button_hidden_div, data, data_previous):
     """
     This callback wraps all actions that will result in the table data being output
 
@@ -322,6 +357,10 @@ def table_data_update_dispatcher(data_timestamp, active_cell, data, data_previou
     ctx = dash.callback_context
     if not ctx.triggered or ctx.triggered[0]['prop_id'] == '.':
         return dash.no_update
+
+    # If we have a Refresh Data button callback, reload the data from the db and exit
+    if RELOAD_BUTTON_CONFIRM in ctx.triggered[0]["prop_id"]:
+        return load_data(SUGGESTED_COLUMN_SPECS).to_dict("records")
 
     data_edited = False
 
@@ -346,6 +385,19 @@ def table_data_update_dispatcher(data_timestamp, active_cell, data, data_previou
         return table_edit_callback(data, data_previous)
 
     return dash.no_update
+
+
+def _get_changed_rows(data):
+    """
+    Returns data rows with non-empty CHANGED_COLUMN
+
+    Args:
+        data (list):  List of dicts of data
+
+    Returns:
+        list of references to the dicts of data that have changed
+    """
+    return [row for row in data if row.get(CHANGED_COLUMN, None)]
 
 
 def table_edit_callback(data, data_previous, changed_column=CHANGED_COLUMN):
