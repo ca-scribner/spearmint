@@ -10,8 +10,6 @@ import dash_html_components as html
 import dash_core_components as dcc
 from dash.dependencies import State, Input, Output
 import dash_table
-from flask import send_from_directory, send_file
-
 
 from spearmint.dashboard.diff_dashtable import diff_dashtable
 from spearmint.data.db_session import global_init
@@ -30,7 +28,6 @@ RELOAD_BUTTON_CONFIRM = "reload-data-button-confirm"
 SAVE_TO_DB_BUTTON = "save-to-db-button"
 SAVE_TO_DB_BUTTON_CONFIRM = "save-to-db-button-confirm"
 TRANSACTION_TABLE = "transaction-table"
-DOWNLOAD_DB_BUTTON = "download-db-button"
 
 # Column to keep track of any edits in the table
 CHANGED_COLUMN = "__changed"
@@ -281,7 +278,6 @@ def get_app_layout(db_file):
                 id=SAVE_TO_DB_BUTTON_CONFIRM,
                 message="Are you sure you want to save changes to the database?"
             ),
-            html.Button("Download DB", id=DOWNLOAD_DB_BUTTON)
         ]),
         dash_table.DataTable(
             id=TRANSACTION_TABLE,
@@ -345,22 +341,6 @@ def get_tooltip_data(data):
 def reload_button(n_clicks, data):
     changed_rows = _get_changed_rows(data)
     return len(changed_rows) > 0
-
-
-@app.callback(
-    Output(DOWNLOAD_DB_BUTTON, "style"),
-    [
-        Input(DOWNLOAD_DB_BUTTON, "n_clicks"),
-    ],
-    [
-        State("db-file", "children")
-    ]
-)
-def download_db(n_clicks, db_file):
-    if n_clicks:
-        print("TODO: Download db!")
-        send_file(db_file, as_attachment=True)
-    raise dash.exceptions.PreventUpdate("Never updates")
 
 
 @app.callback(
