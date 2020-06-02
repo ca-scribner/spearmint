@@ -119,6 +119,28 @@ def get_unique_transaction_categories_as_string(category_type='all') -> List[str
     return categories
 
 
+def get_transactions_by_id(return_type='list', lazy=False, filters=tuple(), ids=tuple()) -> List[Transaction]:
+    """
+    Returns all transactions with given id as specified type
+
+    Args:
+        return_type (str): One of:
+                            list: returns as [Transaction]
+                            df: returns as pd.DataFrame with one row per transaction and all attributes as columns
+        lazy (bool): If True, lazily load transactions (thus information about linked categories will not be available).
+                     If False, eagerly load the category objects as well using joinedload
+        filters: Iterable of arguments to pass to query.filter, such as (transaction.category.is_(None),)
+        ids (iterable): Iterable of id's to include in the query
+    Returns:
+        (list): Transactions matching the search
+    """
+    # Add filter by id
+    filters = list(filters)
+    filters.append(Transaction.id.in_(ids))
+
+    return get_transactions(return_type, lazy, filters)
+
+
 def get_transactions(return_type='list', lazy=False, filters=tuple()) -> List[Transaction]:
     """
     Returns all transactions as specified type
@@ -131,7 +153,7 @@ def get_transactions(return_type='list', lazy=False, filters=tuple()) -> List[Tr
                             df: returns as pd.DataFrame with one row per transaction and all attributes as columns
         lazy (bool): If True, lazily load transactions (thus information about linked categories will not be available).
                      If False, eagerly load the category objects as well using joinedload
-        filters: Iterable of arguments to pass to query.filter, such as (ransaction.category.is_(None),)
+        filters: Iterable of arguments to pass to query.filter, such as (transaction.category.is_(None),)
 
     Returns:
         See return_type

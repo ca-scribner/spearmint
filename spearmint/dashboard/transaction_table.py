@@ -12,10 +12,11 @@ from dash.dependencies import State, Input, Output
 import dash_table
 
 from spearmint.dashboard.diff_dashtable import diff_dashtable
-from spearmint.data.db_session import global_init
+from spearmint.data.category import Category
+from spearmint.data.db_session import global_init, create_session
 from spearmint.data.transaction import Transaction
-from spearmint.services.transaction import get_transactions
-
+from spearmint.services.category import get_category_by_id
+from spearmint.services.transaction import get_transactions, get_transactions_by_id
 
 SUGGESTED_CATEGORY_PREFIX = "(S)"
 CATEGORY = "category"
@@ -25,7 +26,6 @@ DATETIME = "datetime"
 DESCRIPTION = "description"
 RELOAD_BUTTON = "reload-data-button"
 RELOAD_BUTTON_CONFIRM = "reload-data-button-confirm"
-SAVE_TO_DB_BUTTON = "save-to-db-button"
 SAVE_TO_DB_BUTTON_CONFIRM = "save-to-db-button-confirm"
 TRANSACTION_TABLE = "transaction-table"
 
@@ -34,8 +34,7 @@ CHANGED_COLUMN = "__changed"
 
 # "unique" padding for start and end of each column specified in the changed column to make them more unique.  Otherwise
 # if we had columns of "Product Description" and "Description", "Description" might get triggered by both
-CHANGED_PAD_START = "__"
-CHANGED_PAD_END = "__"
+CHANGED_DELIMINATOR = "_|_"
 
 
 # TODO: Simplify the suggested category naming stuff once we're done debugging
@@ -85,8 +84,8 @@ def flatten(lst):
 
 
 SUGGESTED_COLUMN_SPECS = [
-    {'name': f'{SUGGESTED_CATEGORY_PREFIX} from_file', 'scheme': 'from_file', 'n': 1, 'order_by': None},
     {'name': f'{SUGGESTED_CATEGORY_PREFIX} most_common', 'scheme': 'most_common', 'n': 2, 'order_by': None},
+    {'name': f'{SUGGESTED_CATEGORY_PREFIX} from_file', 'scheme': 'from_file', 'n': 1, 'order_by': None},
     # {'name': f'{SUGGESTED_CATEGORY_PREFIX} clf', 'scheme': 'clf', 'n': 1, 'order_by': None},
 ]
 
@@ -243,7 +242,7 @@ def get_conditional_styles():
         style_data_conditional.append(
             {
                 "if": {
-                    "filter_query": f"{{{CHANGED_COLUMN}}} contains {CHANGED_PAD_START}{c}{CHANGED_PAD_END}",
+                    "filter_query": f"{{{CHANGED_COLUMN}}} contains {CHANGED_DELIMINATOR}{c}",
                     "column_id": c,
                 },
                 "backgroundColor": "rgb(250, 140, 0)",
@@ -377,7 +376,7 @@ def table_data_update_dispatcher(data_timestamp, active_cell, reload_button_conf
 
     # Save changes to db, clear the changes, and exit
     if SAVE_TO_DB_BUTTON_CONFIRM in ctx.triggered[0]["prop_id"]:
-        print(f"TODO: SAVE TO DB")
+        _save_changes_to_db(data)
 
         # Reload new db data
         return load_data(SUGGESTED_COLUMN_SPECS).to_dict("records")
@@ -405,6 +404,63 @@ def table_data_update_dispatcher(data_timestamp, active_cell, reload_button_conf
         return table_edit_callback(data, data_previous)
 
     return dash.no_update
+
+
+def _save_changes_to_db(data):
+    changes = _get_changed_rows(data)
+    if len(changes) == 0:
+        raise dash.exceptions.PreventUpdate("No changes to save")
+    trx_ids = [c['id'] for c in changes]
+    trxs = get_transactions_by_id(ids=trx_ids)
+    for c, trx in zip(changes, trxs):
+        these_changes = _get_changed_columns(c[CHANGED_COLUMN])
+
+        if these_changes != set([CATEGORY, CATEGORY_ID]):
+            raise ValueError("Invalid change - only changes to category column supported")
+
+        if c[CATEGORY] is None:
+            # Manually deleted category.  Remove existing accepted category and move on
+            trx.category = None
+            # trx.category_id = None  # This should be redundant
+        elif c[CATEGORY_ID] is None:
+            # Manually entered - create new Category and attach
+            category = Category(scheme='manual', category=c[CATEGORY])
+            trx.category = category
+        else:
+            # Accepted a suggestion.  Reuse this category by attaching to .category.
+            category = get_category_by_id(id=c[CATEGORY_ID])
+            trx.category = category
+    # To commit these objects, which came from a different session that I no longer have, merge them into a new
+    # session. (from https://stackoverflow.com/a/47663833/5394584)
+    # Is there a better pattern I could use for passing objects that avoids this?  Start here if current solution
+    # gives problems:
+    # https://stackoverflow.com/questions/48218065/programmingerror-sqlite-objects-created-in-a-thread-can-only-be-used-in-that-sa
+    s = create_session()
+    trxs_to_commit = [s.merge(trx) for trx in trxs]
+    s.add_all(trxs_to_commit)
+    s.commit()
+    s.close()
+
+
+def _get_changed_columns(changed_column_entry: str) -> set:
+    """
+    Returns a set of column names for the columns that have changed according to changed_column_entry
+
+    This is used to interrogate the CHANGED column in the table
+
+    Args:
+        changed_column_entry (str): String denoting columns changed in a row of the table
+
+    Returns:
+        (set): Set of column names that changed
+    """
+    # We only process changes that happen to the category column
+    these_changes = [change_col.strip() for change_col in changed_column_entry.split(CHANGED_DELIMINATOR)]
+    # Remove repeated values (whether a column changed more than once doesn't matter to us)
+    these_changes = set(these_changes)
+    # Remove None, which can get in there from time to time but is not a valid column...
+    these_changes = these_changes - {None, 'None'}
+    return these_changes
 
 
 def _get_changed_rows(data):
@@ -458,7 +514,7 @@ def table_edit_callback(data, data_previous, changed_column=CHANGED_COLUMN):
 
         # If the column is empty it won't be in the dict.  Use .get to handle this with empty string as default
         # Current iteration can have duplicate changes noted here.  Remove or just handle when interpretting the column?
-        data[r_changed][changed_column] = f"{data[r_changed].get(changed_column, '')} {CHANGED_PAD_START}{c_changed}{CHANGED_PAD_END}"
+        data[r_changed][changed_column] = f"{data[r_changed].get(changed_column, '')} {CHANGED_DELIMINATOR}{c_changed}"
 
     return data
 
