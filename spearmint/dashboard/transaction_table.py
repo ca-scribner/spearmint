@@ -308,6 +308,8 @@ def get_app_layout(db_file):
             style_header={"whiteSpace": "normal", "height": "auto"},
             style_table={'height': '75vh', 'overflowY': 'auto'},
             **get_conditional_styles(),
+            page_action="native",
+            page_size=25,
             filter_action="native",
             sort_action="native",
             sort_mode="multi",
