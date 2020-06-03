@@ -15,6 +15,8 @@ from spearmint.dashboard.diff_dashtable import diff_dashtable
 from spearmint.data.category import Category
 from spearmint.data.db_session import global_init, create_session
 from spearmint.data.transaction import Transaction
+from spearmint.services.budget import get_expense_budget_collection, get_income_budget_collection, \
+    get_excluded_budget_collection
 from spearmint.services.category import get_category_by_id
 from spearmint.services.transaction import get_transactions, get_transactions_by_id
 
@@ -85,6 +87,7 @@ def flatten(lst):
 
 SUGGESTED_COLUMN_SPECS = [
     {'name': f'{SUGGESTED_CATEGORY_PREFIX} most_common', 'scheme': 'most_common', 'n': 2, 'order_by': None},
+    {'name': f'{SUGGESTED_CATEGORY_PREFIX} rf', 'scheme': 'rf', 'n': 1, 'order_by': None},
     {'name': f'{SUGGESTED_CATEGORY_PREFIX} from_file', 'scheme': 'from_file', 'n': 1, 'order_by': None},
     # {'name': f'{SUGGESTED_CATEGORY_PREFIX} clf', 'scheme': 'clf', 'n': 1, 'order_by': None},
 ]
@@ -108,7 +111,11 @@ COLUMN_DROPDOWNS = {
     # }
 }
 COLUMNS_TO_HIDE = [CHANGED_COLUMN]
-COLUMNS_TO_SHOW = COLUMNS_TO_SHOW_FROM_DATA + ADDITIONAL_COLUMNS_TO_SHOW + COLUMNS_TO_HIDE
+
+show_hidden_columns = False
+COLUMNS_TO_SHOW = COLUMNS_TO_SHOW_FROM_DATA + ADDITIONAL_COLUMNS_TO_SHOW
+if show_hidden_columns:
+    COLUMNS_TO_SHOW += COLUMNS_TO_HIDE
 
 
 app = dash.Dash(__name__)
@@ -181,6 +188,14 @@ def load_data(suggested_columns=tuple()):
         df[c] = None
 
     return df
+
+
+def load_budget_categories():
+    expenses = get_expense_budget_collection()
+    incomes = get_income_budget_collection()
+    exclusions = get_excluded_budget_collection()
+    categories = expenses.categories + incomes.categories + exclusions.categories
+    return categories
 
 
 def get_conditional_styles():
@@ -291,11 +306,12 @@ def get_app_layout(db_file):
             tooltip_data=get_tooltip_data(data),
             style_cell={"overflow": "hidden", "textOverflow": "ellipsis", "maxWidth": 300},
             style_header={"whiteSpace": "normal", "height": "auto"},
-            style_table={'height': '85vh', 'overflowY': 'auto'},
+            style_table={'height': '75vh', 'overflowY': 'auto'},
             **get_conditional_styles(),
             filter_action="native",
             sort_action="native",
             sort_mode="multi",
+            sort_by=[{'column_id': DATETIME, 'direction': 'desc'}]
             # row_selectable="multi",  # Can I use this to indicate changes cleanly and only pass rows that need change?
         ),
         # Intermediate trigger if reload button confirmed
@@ -313,6 +329,11 @@ def get_app_layout(db_file):
             ],
             style={'display': 'none'}
         ),
+        html.Ul(
+            id="valid-budget-categories",
+            children=f" {CHANGED_DELIMINATOR} ".join(load_budget_categories()),
+
+        )
     ]
 
     return html.Div(children)
@@ -569,6 +590,8 @@ def _get_active_row(active_cell, rows):
     if this_row == None:
         raise ValueError("Cannot find active row")
     return this_row
+
+
 
 
 # CLI

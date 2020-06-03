@@ -7,3 +7,7 @@ def get_income_budget_collection():
 
 def get_expense_budget_collection():
     return budget_definition.get_expense_bc()
+
+
+def get_excluded_budget_collection():
+    return budget_definition.get_excluded_bc()

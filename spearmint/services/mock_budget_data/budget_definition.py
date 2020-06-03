@@ -121,6 +121,12 @@ def get_expense_bc():
     return expenses_category_bc
 
 
+def get_excluded_bc():
+    excluded_bc = BudgetCollection("Excluded Transactions")
+    excluded_bc.add_budget(Budget(0, ['Transfer', 'Credit Card Payment', 'IGNORE_IN_MENTHOL']))
+    return excluded_bc
+
+
 if __name__ == '__main__':
     income_bc = get_income_bc()
     income_bc.display()

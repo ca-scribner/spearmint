@@ -7,4 +7,5 @@ Click
 pytest
 dash
 dash-core-components
+dash-bootstrap-components
 dash-table
