@@ -104,12 +104,12 @@ def get_unique_transaction_categories_as_string(category_type='all') -> List[str
     if category_type == 'all':
         categories = s.query(Category.category).distinct().all()
     elif category_type == 'accepted':
-        raise NotImplementedError("category_type 'accepted' not yet implemented")
-        # From before.  Useful?
-        # transactions = s.query(Transaction).join(Transaction.category)
-        # categories = s.query(Transaction.category).distinct()
-        # # The query returns a tuple per record.  Flatten
-        # categories = [tup[0] for tup in categories]
+        accepted_cat_ids = flatten(s.query(Transaction.category_id).all())
+        categories = (s.query(Category.category)
+                       .filter(Category.id.in_(accepted_cat_ids))
+                       .distinct()
+                       .all()
+                      )
     else:
         raise ValueError(f"Unsupported category_type '{category_type}'")
     s.close()
@@ -221,6 +221,9 @@ def _sa_obj_as_dict(sa_obj, include_category_relationships=True):
 def get_sa_obj_keys(sa_obj):
     return (prop.key for prop in inspect(sa_obj).mapper.column_attrs)
 
+
+def flatten(lst):
+    return [x[0] for x in lst]
 
 
 @click.group()

@@ -16,9 +16,10 @@ from spearmint.data.category import Category
 from spearmint.data.db_session import global_init, create_session
 from spearmint.data.transaction import Transaction
 from spearmint.services.budget import get_expense_budget_collection, get_income_budget_collection, \
-    get_excluded_budget_collection
+    get_excluded_budget_collection, get_unbudgeted_categories
 from spearmint.services.category import get_category_by_id
-from spearmint.services.transaction import get_transactions, get_transactions_by_id
+from spearmint.services.transaction import get_transactions, get_transactions_by_id, \
+    get_unique_transaction_categories_as_string
 
 SUGGESTED_CATEGORY_PREFIX = "(S)"
 CATEGORY = "category"
@@ -190,12 +191,9 @@ def load_data(suggested_columns=tuple()):
     return df
 
 
-def load_budget_categories():
-    expenses = get_expense_budget_collection()
-    incomes = get_income_budget_collection()
-    exclusions = get_excluded_budget_collection()
-    categories = expenses.categories + incomes.categories + exclusions.categories
-    return categories
+def load_unbudgeted_categories():
+    all_categories = get_unique_transaction_categories_as_string(category_type='accepted')
+    return get_unbudgeted_categories(all_categories)
 
 
 def get_conditional_styles():
@@ -331,14 +329,38 @@ def get_app_layout(db_file):
             ],
             style={'display': 'none'}
         ),
-        html.Ul(
-            id="valid-budget-categories",
-            children=f" {CHANGED_DELIMINATOR} ".join(load_budget_categories()),
-
+        html.Div(
+            children=[
+                html.H2("Income Categories:"),
+                html.Ul(
+                    id="income-categories-list",
+                    children=categories_to_children_string(get_income_budget_collection().categories),
+                ),
+                html.H2("Expense Categories:"),
+                html.Ul(
+                    id="expense-categories-list",
+                    children=categories_to_children_string(get_expense_budget_collection().categories),
+                ),
+                html.H2("Excluded Categories:"),
+                html.Ul(
+                    id="excluded-categories-list",
+                    children=categories_to_children_string(get_excluded_budget_collection().categories),
+                ),
+                html.H2("Unbudgeted Categories:"),
+                html.Ul(
+                    id="unbudgeted-categories-list",
+                    children=categories_to_children_string(load_unbudgeted_categories()),
+                ),
+            ]
         )
     ]
 
     return html.Div(children)
+
+
+def categories_to_children_string(categories):
+    categories = sorted(categories)
+    return f" {CHANGED_DELIMINATOR} ".join(categories)
 
 
 def get_tooltip_data(data):
@@ -364,6 +386,17 @@ def reload_button(n_clicks, data):
     changed_rows = _get_changed_rows(data)
     return len(changed_rows) > 0
 
+
+@app.callback(
+    Output("unbudgeted-categories-list", "children"),
+    [
+        Input(TRANSACTION_TABLE, "data")
+    ]
+)
+def update_unbudgeted_categories_shown(data):
+    accepted_categories = set(d[CATEGORY] for d in data)
+    unbudgeted_categories = get_unbudgeted_categories(accepted_categories)
+    return categories_to_children_string(unbudgeted_categories)
 
 @app.callback(
     Output(TRANSACTION_TABLE, "data"),
