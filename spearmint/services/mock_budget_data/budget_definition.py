@@ -17,6 +17,7 @@ def get_income_bc():
     #                                 =$ 520/month total
     # ... ~745/month (or more, depending on RRSP/other tax refunds) available but not in below income
     income_bc.add_budget(Budget(9650, ["Paycheck"]))
+    income_bc.add_budget(Budget(0, ["Bonus"]))
     income_bc.add_budget(Budget(200, ["Parents and Gifts"]))
     income_bc.add_budget(Budget(0, ["Tutoring"]))
     income_bc.add_budget(Budget(50, ["Interest Income", "Unknown Income", "Credit Card Rewards"], name="Other"))
@@ -51,6 +52,7 @@ def get_expense_bc():
     expenses_subcategory_bc_dict[name] = BudgetCollection(name=name)
     expenses_subcategory_bc_dict[name].add_budget(Budget(-75, ["Home Services", "Home Insurance"]))
     expenses_subcategory_bc_dict[name].add_budget(Budget(-1850, ["Mortgage & Rent"]))
+    expenses_subcategory_bc_dict[name].add_budget(Budget(-50, ["House Hunt", "Moving"], name="Moving/House Hunt"))
     expenses_subcategory_bc_dict[name].add_budget(Budget(-150, ["Furnishings", "Home Improvement", "Home Supplies"], name="Home Impr_Furn_Supplies"))
 
     # Personal Upkeep
@@ -82,7 +84,7 @@ def get_expense_bc():
     # Travel
     name = "Travel"
     expenses_subcategory_bc_dict[name] = BudgetCollection(name=name)
-    expenses_subcategory_bc_dict[name].add_budget(Budget(-800, ["Beach 2017", "Europe Trip 2016", "Vancouver 2017", "Hawaii 2018", "Vacation", "Colorado 2019"], name="Vacations"))
+    expenses_subcategory_bc_dict[name].add_budget(Budget(-800, ["Big Trip Stuff", "Beach 2017", "Europe Trip 2016", "Vancouver 2017", "Hawaii 2018", "Vacation", "Colorado 2019"], name="Vacations"))
     expenses_subcategory_bc_dict[name].add_budget(Budget(-200, ["Trips Home"]))
 
     # Misc
@@ -93,7 +95,7 @@ def get_expense_bc():
     expenses_subcategory_bc_dict[name].add_budget(Budget(-10, ["ATM Fee", "Bank Fee", "Fees & Charges", "Finance Charge", "Late Fee", "Tickets"], name="Fees and Charges"))
     expenses_subcategory_bc_dict[name].add_budget(Budget(-0, ["Federal Tax", "Taxes", "State Tax"], name="Taxes"))
     expenses_subcategory_bc_dict[name].add_budget(Budget(-15, ["Passport, License .."], name="Passport, License, etc"))
-    expenses_subcategory_bc_dict[name].add_budget(Budget(-15, ["Cash & ATM"], name="Unknown - Cash, etc"))
+    expenses_subcategory_bc_dict[name].add_budget(Budget(-15, ["Cash & ATM", "Unknown Expense"], name="Unknown - Cash, etc"))
 
     # Extra Savings
     name = "Extra Savings"
@@ -124,7 +126,8 @@ def get_expense_bc():
 
 def get_excluded_bc():
     excluded_bc = BudgetCollection("Excluded Transactions")
-    excluded_bc.add_budget(Budget(0, ['Transfer', 'Credit Card Payment', 'IGNORE_IN_MENTHOL']))
+    excluded_bc.add_budget(Budget(0, ['Transfer', 'Credit Card Payment', 'IGNORE_IN_MENTHOL', "House Sale",
+                                      "Property Tax", "HOA Fees", "Auto Payment"]))
     return excluded_bc
 
 
