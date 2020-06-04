@@ -400,7 +400,7 @@ def get_date_picker():
     # Wasn't sure how to make a date picker placeholder then update it later.  Maybe I can store it globally and change
     # its properties later?
     df = get_transactions('df')
-    start_date = df[DATETIME_COLUMN].min()
+    start_date = "2019-01-01"
     end_date = df[DATETIME_COLUMN].max()
 
     return dcc.DatePickerRange(

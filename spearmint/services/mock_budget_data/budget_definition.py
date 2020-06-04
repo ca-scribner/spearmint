@@ -33,7 +33,7 @@ def get_expense_bc():
     expenses_subcategory_bc_dict[name].add_budget(Budget(-125, ["Auto Insurance"]))
     expenses_subcategory_bc_dict[name].add_budget(Budget(-100, ["Gas & Fuel"]))
     expenses_subcategory_bc_dict[name].add_budget(Budget(-15, ["Parking"]))
-    expenses_subcategory_bc_dict[name].add_budget(Budget(-125, ["Public Transportation"]))
+    expenses_subcategory_bc_dict[name].add_budget(Budget(-90, ["Public Transportation"]))
     expenses_subcategory_bc_dict[name].add_budget(Budget(-125, ["Service & Parts"]))
     # expenses_subcategory_bc_dict[name].add_budget(Budget(-300, ["Vehicle Property Tax"], amount_type='Yearly')) # Is this a thing in Canada?
 
