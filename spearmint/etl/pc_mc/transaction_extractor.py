@@ -9,9 +9,6 @@ class PcMcTransactionExtractor(TransactionExtractor):
 
         self.parse_dates_from = {self.raw_name_map["datetime"]: ["Date", "Time"]}
 
-    def _get_raw_amount(self):
-        return -self.df_raw[self.raw_name_map["amount"]]
-
     def _get_raw_account_name(self):
         return self.account_name
 
