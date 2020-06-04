@@ -18,6 +18,7 @@ def get_income_bc():
     # ... ~745/month (or more, depending on RRSP/other tax refunds) available but not in below income
     income_bc.add_budget(Budget(9650, ["Paycheck"]))
     income_bc.add_budget(Budget(200, ["Parents and Gifts"]))
+    income_bc.add_budget(Budget(0, ["Tutoring"]))
     income_bc.add_budget(Budget(50, ["Interest Income", "Unknown Income", "Credit Card Rewards"], name="Other"))
 
     return income_bc
