@@ -303,5 +303,4 @@ def get_checked_sidebar_children(ul_children):
     """
     leaves = get_leaves_below_sidebar_obj(ul_children, path_to_obj=tuple())
     checked_leaves = get_checked_leaves(leaves)
-    print(checked_leaves)
     return checked_leaves

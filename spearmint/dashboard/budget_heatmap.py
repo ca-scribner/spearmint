@@ -597,7 +597,7 @@ def update_barchart(clickData, start_date, end_date, moving_average_window):
 
     # Filter down to only the budget_name we care about, aggregating categories to a budget if needed
     budget = BUDGET_COLLECTION.get_budget_by_name(budget_name)
-    df['budget_name'] = budget.aggregate_categories_to_budget(df[CATEGORY_COLUMN])
+    df['budget_name'] = budget.aggregate_categories_to_budget(df[CATEGORY_COLUMN], depth='this')
     df = df.loc[df['budget_name'] == budget_name]
 
     fig = monthly_bar(df,

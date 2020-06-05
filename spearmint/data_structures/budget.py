@@ -219,6 +219,7 @@ class BudgetCollection:
         Args:
             categories: List of category names to be aggregated into budget names.
             depth (str): One of:
+                            this: Aggregate categories to this budget.  Effectively an "in" operation
                             child: Aggregate categories to the budgets that are the immediate children of this
                                    BudgetCollection
                             leaf: Aggregate categories to the leaf budgets of this BudgetCollection
@@ -232,6 +233,8 @@ class BudgetCollection:
             budgets_to_aggregate_to = self.get_leaf_budgets()
         elif depth == 'child':
             budgets_to_aggregate_to = self.get_budgets()
+        elif depth == 'this':
+            budgets_to_aggregate_to = [self]
         else:
             raise ValueError(f"Unknown value for depth '{depth}")
 
