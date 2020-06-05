@@ -1,4 +1,6 @@
 from typing import Union, Tuple, List
+import numpy as np
+
 
 DEFAULT_BUDGET_COLLECTION_NAME = "Unnamed Budget"
 
@@ -55,7 +57,11 @@ class BudgetCollection:
 
         return categories
 
-    def add_budget(self, b, raise_on_duplicate_categories=True):
+    @property
+    def category_to_budget(self):
+        return {c: self.name for c in self.categories}
+
+    def add_budget(self, b, raise_on_duplicate=True):
         """
         Add a Budget to the collection, optionally raising if this budget overlaps an existing category
 
@@ -63,17 +69,62 @@ class BudgetCollection:
             They might mess with .to_str().
         Args:
             b (Budget):
-            raise_on_duplicate_categories (bool): If True, raise if b has a category already included in this collection
+            raise_on_duplicate (bool): If True, raise if b or any of its children (budget or category) shares a name
+                                       with any budget or category already in this item)
 
         Returns:
             None
         """
-        if raise_on_duplicate_categories:
+        if raise_on_duplicate:
             known_categories = set(self.categories)
-            for cat in b.categories:
-                if cat in known_categories:
-                    raise ValueError("Budget {b} has category {cat} that is already in this BudgetCollection")
+            known_budgets = set(self.get_budget_names(depth=np.inf))
+            known = known_categories | known_budgets | set([self.name])
+
+            for cat in b.categories + [b.name]:
+                if cat in known:
+                    raise ValueError(f"Budget {b} has category {cat} that is already in this BudgetCollection")
         self.budgets.append(b)
+
+    def get_all_names(self):
+        """
+        Returns a list of all names, either Budget or category, used in this object
+
+        If names are duplicated, they will appear multiple times in this list
+        """
+        return self.get_budget_names(depth=np.inf) + self.categories + [self.name]
+
+    def get_duplicated_names(self):
+        names = self.get_all_names()
+        seen = set()
+        duplicates = set()
+        for name in names:
+            if name in seen:
+                duplicates.add(name)
+            else:
+                seen.add(name)
+
+        return duplicates
+
+    def has_duplicates(self):
+        """
+        Returns True if any of the names in this object, either Budget or Category, are duplicated
+        """
+        names = self.get_all_names()
+        names_unique = set(names)
+        return len(names) != len(names_unique)
+
+    def get_budget_names(self, depth=0):
+        """
+        Returns a list of the names of the Budgets (or BudgetCollections) that are immediate children of this object
+        """
+        names = [b.name for b in self.get_budgets()]
+        if depth > 0:
+            for b in self.get_budgets():
+                try:
+                    names.extend(b.get_budget_names(depth=depth-1))
+                except AttributeError:
+                    pass
+        return names
 
     def get_budgets(self):
         return self.budgets
@@ -112,7 +163,7 @@ class BudgetCollection:
                         pass
 
         # If we get to the end, we found nothing
-        raise KeyError("Cannot find budget named '{name}'")
+        raise KeyError(f"Cannot find budget named '{name}'")
 
     def get_leaf_budgets(self):
         """
@@ -141,7 +192,8 @@ class BudgetCollection:
             (BudgetCollection)
         """
         new_bc = BudgetCollection(self.name)
-        bs = [b for b in self.get_leaf_budgets() if b.name in budgets]
+
+        bs = [self.get_budget_by_name(name, recurse=True) for name in budgets]
         for b in bs:
             new_bc.add_budget(b)
         return new_bc
@@ -158,7 +210,7 @@ class BudgetCollection:
             bc.add_budget(b)
         return bc
 
-    def aggregate_categories_to_budget(self, categories):
+    def aggregate_categories_to_budget(self, categories, depth='leaf'):
         """
         Returns the budget name that corresponds to each category provided and None if a category is not in the BC.
 
@@ -166,14 +218,24 @@ class BudgetCollection:
 
         Args:
             categories: List of category names to be aggregated into budget names.
+            depth (str): One of:
+                            child: Aggregate categories to the budgets that are the immediate children of this
+                                   BudgetCollection
+                            leaf: Aggregate categories to the leaf budgets of this BudgetCollection
 
         Returns:
             TODO
             (list?)
         """
         category_to_budget = {}
+        if depth == 'leaf':
+            budgets_to_aggregate_to = self.get_leaf_budgets()
+        elif depth == 'child':
+            budgets_to_aggregate_to = self.get_budgets()
+        else:
+            raise ValueError(f"Unknown value for depth '{depth}")
 
-        for b in self.get_leaf_budgets():
+        for b in budgets_to_aggregate_to:
             category_to_budget.update(b.category_to_budget)
 
         budgets = [category_to_budget.get(c, None) for c in categories]
@@ -233,6 +295,9 @@ class BudgetCollection:
             ret += f"\n{'Total':30s} | ${self.amount:>8.2f}"
         return ret
 
+    def __str__(self):
+        return self.to_str()
+
     def display(self, amount=True, categories=True):
         """
         Display to screen the contents of this object
@@ -263,7 +328,10 @@ class Budget:
         self.categories = categories
 
         if name is None:
-            self.name = ", ".join(self.categories)
+            if len(self.categories) == 1:
+                self.name = self.categories[0] + "_"  # Avoid duplicating names
+            else:
+                self.name = ", ".join(self.categories)
         else:
             self.name = name
 

@@ -2,7 +2,7 @@ import operator
 from functools import reduce
 from typing import Union
 import json
-
+import numpy as np
 import dash
 import dash_html_components as html
 
@@ -151,7 +151,7 @@ def get_leaves_below_sidebar_obj(ul_children: dict, path_to_obj: Union[str, tupl
     return to_return
 
 
-def make_sidebar_children(data, top_item, inherited_class="", child_class=""):
+def make_sidebar_children(data, top_item, inherited_class="", child_class="", depth=np.inf):
     """
     Recursively generate a hierarchical list defined by data, starting at top_item, using Ul and Li objects
 
@@ -174,6 +174,7 @@ def make_sidebar_children(data, top_item, inherited_class="", child_class=""):
         inherited_class (str): HTML class name to apply once to all levels of the list
         child_class (str): HTML class name to apply once per step in the list (so Item 1-1 would have it once,
                            Item 1-1-1 would have it twice, etc.).  Useful for incrementing tab behaviour
+        depth (int): Maximum number of levels to recurse in the sidebar.  Default is all levels
 
     Returns:
         (list): List of html elements for use as the children attribute of a html.Ul
@@ -188,17 +189,23 @@ def make_sidebar_children(data, top_item, inherited_class="", child_class=""):
             className=this_className,
         ))
 
-        if name in data:
-            nested_children = make_sidebar_children(data, name, inherited_class=this_className, child_class=child_class)
-            content.append(html.Ul(
-                id=generate_checklist_ul_id(name),
-                children=nested_children,
-            ))
+        if depth > 0:
+            if name in data:
+                nested_children = make_sidebar_children(data,
+                                                        name,
+                                                        inherited_class=this_className,
+                                                        child_class=child_class,
+                                                        depth=depth-1
+                                                        )
+                content.append(html.Ul(
+                    id=generate_checklist_ul_id(name),
+                    children=nested_children,
+                ))
 
     return content
 
 
-def make_sidebar_ul(data, top_item, inherited_class="", child_class=""):
+def make_sidebar_ul(data, top_item, inherited_class="", child_class="", depth=np.inf):
     """
     Returns a sidebar defined using a html.Ul with nested Li and Ul elements
 
@@ -210,7 +217,12 @@ def make_sidebar_ul(data, top_item, inherited_class="", child_class=""):
     Returns:
         (html.Ul)
     """
-    children = make_sidebar_children(data=data, top_item=top_item, inherited_class=inherited_class, child_class=child_class)
+    children = make_sidebar_children(data=data,
+                                     top_item=top_item,
+                                     inherited_class=inherited_class,
+                                     child_class=child_class,
+                                     depth=depth
+                                     )
 
     ul = html.Ul(id="sidebar-ul",
                  children=children,
@@ -291,4 +303,5 @@ def get_checked_sidebar_children(ul_children):
     """
     leaves = get_leaves_below_sidebar_obj(ul_children, path_to_obj=tuple())
     checked_leaves = get_checked_leaves(leaves)
+    print(checked_leaves)
     return checked_leaves

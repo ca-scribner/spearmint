@@ -14,7 +14,7 @@ from spearmint.dashboard.utils import get_rounded_z_range_including_mid, make_ce
     invisible_figure, round_date_to_month_begin
 from spearmint.data.db_session import global_init
 from spearmint.data_structures.budget import BudgetCollection
-from spearmint.services.budget import get_expense_budget_collection
+from spearmint.services.budget import get_overall_budget_collection
 from spearmint.services.transaction import get_transactions, get_unique_transaction_categories_as_string
 
 MOVING_AVERAGE_SLIDER_TICKS = [1, 2, 3, 6, 12]
@@ -33,7 +33,9 @@ external_stylesheets = [dbc.themes.BOOTSTRAP]
 
 app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
 
-BUDGET_COLLECTION = get_expense_budget_collection()
+BUDGET_COLLECTION = get_overall_budget_collection()
+
+BUDGET_COLLECTION.display()
 
 
 # Define a right margin for the heatmap and barchart.  This is to achieve a (implicitly) shared x-axis without having to
@@ -95,7 +97,7 @@ def budget_heatmap(df, datetime_column=DATETIME_COLUMN, category_column=CATEGORY
 
     # If we have a budget collection with aggregated budgets (multiple categories -> single budget), aggregate
     if isinstance(budget, BudgetCollection):
-        df['budget_name'] = budget.aggregate_categories_to_budget(df[category_column])
+        df['budget_name'] = budget.aggregate_categories_to_budget(df[category_column], depth='child')
         budget_names = [b.name for b in budget.get_budgets()]
     else:
         raise NotImplementedError("This is not done.  I think we need to catch if dict here and do something.  "
@@ -413,8 +415,17 @@ def get_date_picker():
         className="controls-sidebar",
     )
 
+@app.callback(
+    Output("controls-sidebar", "children"),
+    [
+        Input("monthly-hist-depth-slider", "value")
+    ]
+)
+def update_controls(depth):
+    return get_controls(depth=depth)
 
-def get_controls():
+
+def get_controls(depth):
     return html.Div(
         [
             get_date_picker(),
@@ -429,8 +440,19 @@ def get_controls():
                 className="controls-sidebar",
             ),
             html.Hr(),
+            dcc.Slider(
+                id="monthly-hist-depth-slider",
+                min=0,
+                max=3,
+                step=1,
+                marks={x: str(x) for x in range(4)},
+                value=depth,
+                className="controls-sidebar",
+            ),
+            html.Hr(),
             html.Div(make_sidebar_ul(BUDGET_COLLECTION.categories_flat_dict,
-                                     "Expenses",
+                                     "Overall",
+                                     depth=depth,
                                      )),
         ],
         className='controls-sidebar-base'
@@ -448,7 +470,8 @@ def get_app_layout():
                     dbc.Row(
                         children=[
                             dbc.Col(
-                                children=get_controls(),
+                                id='controls-sidebar',
+                                children=get_controls(depth=3),
                                 lg=3, md=4, xs=6,  # Responsive widths
                             ),
                             dbc.Col(

@@ -1,3 +1,4 @@
+from spearmint.data_structures.budget import BudgetCollection
 from spearmint.services.mock_budget_data import budget_definition
 
 
@@ -30,3 +31,14 @@ def get_unbudgeted_categories(categories):
 
     unbudgeted = [c for c in categories if c not in budgeted]
     return unbudgeted
+
+
+def get_overall_budget_collection():
+    """
+    Returns a BudgetCollection that includes Income, Expense, and Excluded transactions
+    """
+    bc = BudgetCollection(name="Overall")
+    bc.add_budget(get_income_budget_collection())
+    bc.add_budget(get_expense_budget_collection())
+    bc.add_budget(get_excluded_budget_collection())
+    return bc
