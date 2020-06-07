@@ -8,8 +8,8 @@ import dash_html_components as html
 import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output, State, ALL
 
-from spearmint.dashboard.budget_sidebar_elements import make_sidebar_ul
-from spearmint.dashboard.budget_sidebar_elements import register_sidebar_list_click, get_checked_sidebar_children
+from spearmint.dashboard.budget_sidebar_list_elements import make_sidebar_ul
+from spearmint.dashboard.budget_sidebar_list_elements import register_sidebar_list_click, get_checked_sidebar_children
 from spearmint.dashboard.utils import get_rounded_z_range_including_mid, make_centered_rg_colorscale, date_shift, \
     invisible_figure, round_date_to_month_begin
 from spearmint.data.db_session import global_init
@@ -29,13 +29,14 @@ CATEGORY_COLUMN = "category"
 DATETIME_COLUMN = "datetime"
 AMOUNT_COLUMN = "amount"
 
+SLIDER_TITLE_WIDTHS = {'md': 2, 'sm': 12}
+SLIDER_WIDTHS = {'md': 10, 'sm': 12}
+
 external_stylesheets = [dbc.themes.BOOTSTRAP]
 
 app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
 
 BUDGET_COLLECTION = get_overall_budget_collection()
-
-BUDGET_COLLECTION.display()
 
 
 # Define a right margin for the heatmap and barchart.  This is to achieve a (implicitly) shared x-axis without having to
@@ -211,7 +212,6 @@ def budget_heatmap(df, datetime_column=DATETIME_COLUMN, category_column=CATEGORY
         )
 
     fig.update_layout(
-        annotations=annotations,
         **FIGURE_BACKGROUND
     )
     fig.update_yaxes(dtick=1)
@@ -411,80 +411,10 @@ def _parse_dates(date_column, df, end_date, start_date, moving_average_window):
     return start_date, end_date, date_range
 
 
-def get_date_picker():
-    # Is there a better way to do this where I don't need a separate data access step purely for the date_picker?
-    # Wasn't sure how to make a date picker placeholder then update it later.  Maybe I can store it globally and change
-    # its properties later?
-    df = get_transactions('df')
-    start_date = "2019-01-01"
-    end_date = df[DATETIME_COLUMN].max()
-
-    return dcc.DatePickerRange(
-        id='monthly-hist-date-range',
-        start_date=pd.to_datetime(start_date),
-        end_date=pd.to_datetime(end_date),
-        # min_date_allowed=pd.to_datetime("2019-01-01"),
-        # max_date_allowed=pd.to_datetime("2020-01-01"),  # Could set to real data range
-        display_format="YYYY-MMM-DD",
-        className="controls-sidebar",
-    )
-
-@app.callback(
-    Output("controls-sidebar", "children"),
-    [
-        Input("monthly-hist-depth-slider", "value")
-    ]
-)
-def update_controls(depth):
-    return get_controls(depth=depth)
-
-
-def get_controls(depth):
-    return html.Div(
-        [
-            get_date_picker(),
-            dcc.Slider(
-                id="monthly-hist-ma-slider",
-                min=1,
-                max=12,
-                step=None,
-                marks={x: str(x) for x in MOVING_AVERAGE_SLIDER_TICKS},
-                value=6,
-                className="controls-sidebar",
-            ),
-            dcc.Slider(
-                id="monthly-hist-depth-slider",
-                min=0,
-                max=3,
-                step=1,
-                marks={x: str(x) for x in range(4)},
-                value=depth,
-                className="controls-sidebar",
-            ),
-            dcc.Slider(
-                id="annotation-size-slider",
-                min=0,
-                max=14,
-                step=2,
-                marks={x: str(x) for x in [0, 8, 10, 12, 14]},
-                value=14,
-                className="controls-sidebar",
-            ),
-            html.Div(make_sidebar_ul(BUDGET_COLLECTION.categories_flat_dict,
-                                     "Overall",
-                                     depth=depth,
-                                     )),
-        ],
-        className='controls-sidebar-base'
-        # style=dict(fontSize='10px'),
-    )
-
-
 def get_app_layout():
     return html.Div(
         children=[
             # Banner
-            html.H1(children="Budget Heatmaps"),
             dbc.Container(
                 [
                     dbc.Row(
@@ -527,9 +457,128 @@ def get_app_layout():
                 ],
                 fluid=True,
             ),
-            html.Div(id="tempdiv"),
         ]
     )
+
+
+def get_date_picker():
+    # Is there a better way to do this where I don't need a separate data access step purely for the date_picker?
+    # Wasn't sure how to make a date picker placeholder then update it later.  Maybe I can store it globally and change
+    # its properties later?
+    df = get_transactions('df')
+    start_date = "2019-01-01"
+    end_date = df[DATETIME_COLUMN].max()
+
+    return dcc.DatePickerRange(
+        id='monthly-hist-date-range',
+        start_date=pd.to_datetime(start_date),
+        end_date=pd.to_datetime(end_date),
+        # min_date_allowed=pd.to_datetime("2019-01-01"),
+        # max_date_allowed=pd.to_datetime("2020-01-01"),  # Could set to real data range
+        display_format="YYYY-MMM-DD",
+        className="controls-sidebar",
+        # style={'height': 1110},
+    )
+
+
+def get_controls(depth):
+    return html.Div(
+        dbc.Container(
+            [
+                dbc.Row([
+                    dbc.Col(
+                        get_date_picker(),
+                        style={'fontSize': 5}
+                    ),
+                ]
+                ),
+                dbc.Row([
+                    dbc.Col(
+                        html.Div("Moving Average"),
+                        **SLIDER_TITLE_WIDTHS,  # Responsive widths
+                    ),
+                    dbc.Col(
+                        get_moving_average_slider(),
+                        **SLIDER_WIDTHS,  # Responsive widths
+                    ),
+                ]),
+                dbc.Row([
+                    dbc.Col(
+                        html.Div("Budget Depth"),
+                        **SLIDER_TITLE_WIDTHS,
+                    ),
+                    dbc.Col(
+                        get_depth_slider(depth),
+                        **SLIDER_WIDTHS,
+                    ),
+                ]),
+                dbc.Row([
+                    dbc.Col(
+                        html.Div("Annotation Size"),
+                        **SLIDER_TITLE_WIDTHS,
+                    ),
+                    dbc.Col(
+                        get_annotation_size_slider(),
+                        **SLIDER_WIDTHS,
+                    ),
+                ]),
+                dbc.Row([
+                    html.Div(make_sidebar_ul(BUDGET_COLLECTION.categories_flat_dict,
+                                             "Overall",
+                                             depth=depth,
+                                             )),
+                ]),
+            ],
+            fluid=True
+        ),
+        className='controls-sidebar-base',
+    )
+
+
+def get_moving_average_slider():
+    return dcc.Slider(
+        id="monthly-hist-ma-slider",
+        min=1,
+        max=12,
+        step=None,
+        marks={x: str(x) for x in MOVING_AVERAGE_SLIDER_TICKS},
+        value=6,
+        className="controls-sidebar",
+    )
+
+
+def get_depth_slider(depth):
+    return dcc.Slider(
+        id="monthly-hist-depth-slider",
+        min=0,
+        max=3,
+        step=1,
+        marks={x: str(x) for x in range(4)},
+        value=depth,
+        className="controls-sidebar",
+    )
+
+
+def get_annotation_size_slider():
+    return dcc.Slider(
+        id="annotation-size-slider",
+        min=0,
+        max=14,
+        step=2,
+        marks={x: str(x) for x in [0, 8, 10, 12, 14]},
+        value=14,
+        className="controls-sidebar",
+    )
+
+
+@app.callback(
+    Output("controls-sidebar", "children"),
+    [
+        Input("monthly-hist-depth-slider", "value")
+    ]
+)
+def update_controls(depth):
+    return get_controls(depth=depth)
 
 
 @app.callback(
@@ -596,7 +645,6 @@ app.callback(
 )(register_sidebar_list_click)
 
 
-# Bar chart callback
 @app.callback(
     [
         Output("bar-graph-div", "style"),
@@ -673,7 +721,7 @@ def parse_args():
 
 if __name__ == '__main__':
     args = parse_args()
-    global_init(args.db, echo=True)
+    global_init(args.db, echo=False)
 
     app.layout = get_app_layout()
     app.run_server(debug=True, port=8051)

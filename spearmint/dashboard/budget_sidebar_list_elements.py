@@ -226,6 +226,7 @@ def make_sidebar_ul(data, top_item, inherited_class="", child_class="", depth=np
 
     ul = html.Ul(id="sidebar-ul",
                  children=children,
+                 className="sidebar-ul"
                  )
     return ul
 
@@ -276,7 +277,6 @@ def register_sidebar_list_click(n_clicks, ul_children):
         leaf['props']['className'] = set_className_entry(leaf['props']['className'], "checked", new_status)
 
     return ul_children
-
 
 
 def get_leaves_checked_status(leaves):

@@ -1,10 +1,8 @@
 .checked { color: green }
 
-.controls-sidebar {
-    font-size: 6px;
-    color: red;
+.controls-sidebar-base {
+    font-size: 12px;
+    line-height: 15px
 }
 
-.controls-sidebar-base {
-    font-size: 10px;
-}
+.sidebar-ul {margin-left: 20px; padding-left: 0px}
