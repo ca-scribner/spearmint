@@ -539,6 +539,12 @@ def get_controls(depth, start_date=None, end_date=None):
         dbc.Container(
             [
                 dbc.Row([
+                    html.Button(
+                        "Reload Data",
+                        id="reload-button",
+                    )
+                ]),
+                dbc.Row([
                     dbc.Col(
                         get_date_picker(start_date=start_date, end_date=end_date),
                         style={'fontSize': 5}
@@ -792,6 +798,20 @@ def update_barchart(clickData, start_date, end_date, moving_average_window, work
     fig.update_yaxes(automargin=False)
 
     return div_style, fig
+
+
+@app.callback(
+    Output(RAW_DATA_ID, "children"),
+    [
+        Input("reload-button", "n_clicks")
+    ]
+)
+def reload_data(nclicks):
+    if nclicks == 0:
+        raise dash.exceptions.PreventUpdate()
+
+    raw_data = get_transactions("df").to_json(orient="table")
+    return raw_data
 
 
 def parse_args():
