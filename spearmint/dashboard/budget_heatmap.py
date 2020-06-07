@@ -29,6 +29,8 @@ CATEGORY_COLUMN = "category"
 DATETIME_COLUMN = "datetime"
 AMOUNT_COLUMN = "amount"
 
+WORKING_DATA_ID = "working-data"
+
 SLIDER_TITLE_WIDTHS = {'md': 2, 'sm': 12}
 SLIDER_WIDTHS = {'md': 10, 'sm': 12}
 
@@ -59,35 +61,11 @@ FIGURE_BACKGROUND = {
 X_AXIS_PAD = pd.Timedelta(15, unit='D')
 
 
-def budget_heatmap(df, datetime_column=DATETIME_COLUMN, category_column=CATEGORY_COLUMN,
-                   amount_column=AMOUNT_COLUMN, budget=None, moving_average_window=None, start_date=None, end_date=None,
-                   fig: go.Figure = None, annotations=True, annotation_text_size=8,
-                   ):
-    """
-    TODO:
-        - Docstring
-        - validate moving_average_window (coded but not rigorously checked)
-        - Visually show if there's no data before X date (right now it just looks like spending-budget is great!)
-
-    Args:
-        df:
-        datetime_column:
-        category_column:
-        amount_column:
-        budget:  (or really budget collection?)
-        moving_average_window:
-        start_date:
-        end_date:
-        fig:
-        annotations (bool): If True, write the (amount-budget) value in each cell of the heatmap
-
-    Returns:
-
-    """
-    df = df.copy()
-
-    if fig is None:
-        fig = go.Figure()
+def aggregate_to_budget_deltas(df, datetime_column=DATETIME_COLUMN, category_column=CATEGORY_COLUMN,
+                               amount_column=AMOUNT_COLUMN, budget=None, moving_average_window=None, start_date=None,
+                               end_date=None, work_on_copy=True):
+    if work_on_copy:
+        df = df.copy()
 
     start_date, end_date, date_range = _parse_dates(datetime_column, df, end_date, start_date, moving_average_window)
 
@@ -107,9 +85,9 @@ def budget_heatmap(df, datetime_column=DATETIME_COLUMN, category_column=CATEGORY
     # If we have no data here, we haven't selected any categories to plot.  Escape
     if len(df) == 0:
         # no data!
-        return fig
+        return df
 
-    # Rearrange df of individual transactions into format needed
+        # Rearrange df of individual transactions into format needed
     df_sums = df[['budget_name', datetime_column, amount_column]] \
         .groupby(['budget_name', pd.Grouper(key=datetime_column, freq='MS')]).sum()
 
@@ -181,9 +159,56 @@ def budget_heatmap(df, datetime_column=DATETIME_COLUMN, category_column=CATEGORY
     df_sums['delta'] = df_sums[amount_column] - df_sums['budget']
 
     # Add Subtotal "category" to see everything subtotaled
+    if "delta" in df_sums.index.get_level_values("budget_name"):
+        raise ValueError("Tried to add Subtotal as budget but Subtotal already exists")
     subtotal = df_sums.groupby(level=datetime_column)['delta'].sum()
     subtotal = pd.concat([subtotal], keys=['Subtotal'], names=["budget_name"])
     df_sums = pd.concat([df_sums, subtotal.to_frame()])
+
+    return df_sums
+
+
+def budget_heatmap(df, datetime_column=DATETIME_COLUMN, category_column=CATEGORY_COLUMN,
+                   amount_column=AMOUNT_COLUMN, budget=None, moving_average_window=None, start_date=None, end_date=None,
+                   fig: go.Figure = None, annotations=True, annotation_text_size=8,
+                   ):
+    """
+    TODO:
+        - Docstring
+        - Visually show if there's no data before X date (right now it just looks like spending-budget is great!)
+
+    Args:
+        df:
+        datetime_column:
+        category_column:
+        amount_column:
+        budget:  (or really budget collection?)
+        moving_average_window:
+        start_date:
+        end_date:
+        fig:
+        annotations (bool): If True, write the (amount-budget) value in each cell of the heatmap
+
+    Returns:
+
+    """
+    df = df.copy()
+
+    if fig is None:
+        fig = go.Figure()
+
+    to_plot = aggregate_to_budget_deltas(df, datetime_column=datetime_column, category_column=category_column,
+                                         amount_column=amount_column, budget=budget, moving_average_window=moving_average_window, start_date=start_date,
+                                         end_date=end_date, work_on_copy=True)
+
+    df_sums = to_plot
+
+    start_date, end_date, date_range = _parse_dates(datetime_column, df, end_date, start_date, moving_average_window)
+
+    # If we have no data here, we haven't selected any categories to plot.  Escape
+    if len(df_sums) == 0:
+        # no data!
+        return fig
 
     # Construct plot
     zmid = 0
@@ -474,6 +499,9 @@ def get_app_layout():
                 ],
                 fluid=True,
             ),
+            html.Div(
+                id=WORKING_DATA_ID,  # JSONified pandas df holding the current data subset (to avoid duplicate work)
+            )
         ]
     )
 
@@ -602,6 +630,7 @@ def update_controls(depth):
     [
         Output("heatmap-graph-div", "style"),
         Output("heatmap-graph", "figure"),
+        Output(WORKING_DATA_ID, "children"),
     ],
     [
         Input('monthly-hist-date-range', "start_date"),
@@ -624,7 +653,7 @@ def update_heatmap(start_date, end_date, ma, sidebar_ul_children, annotation_tex
         fig = invisible_figure()
 
         # "show" the invisible figure by returning a style {display == block}
-        return div_style, fig
+        return div_style, fig, ""
 
     if annotation_text_size > 0:
         annotations = True
@@ -651,7 +680,7 @@ def update_heatmap(start_date, end_date, ma, sidebar_ul_children, annotation_tex
     # Update layout to match other figures in this column
     fig.update_layout(margin=SHARED_FIGURE_MARGIN)
     fig.update_yaxes(automargin=False)  # Otherwise our figures will be out of alignment
-    return div_style, fig
+    return (div_style, fig, df.to_json())
 
 
 # Sidebar callbacks
