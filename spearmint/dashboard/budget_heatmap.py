@@ -28,6 +28,10 @@ ANNOTATION_ARGS = dict(
 CATEGORY_COLUMN = "category"
 DATETIME_COLUMN = "datetime"
 AMOUNT_COLUMN = "amount"
+BUDGET_NAME_COLUMN = "budget_name"
+BUDGET_VALUE_COLUMN = "budget"
+DELTA_COLUMN = "delta"
+SUBTOTAL_BUDGET_NAME = "Subtotal"
 
 WORKING_DATA_ID = "working-data"
 
@@ -62,8 +66,10 @@ X_AXIS_PAD = pd.Timedelta(15, unit='D')
 
 
 def aggregate_to_budget_deltas(df, datetime_column=DATETIME_COLUMN, category_column=CATEGORY_COLUMN,
-                               amount_column=AMOUNT_COLUMN, budget=None, moving_average_window=None, start_date=None,
-                               end_date=None, work_on_copy=True):
+                               amount_column=AMOUNT_COLUMN, budget_name_column=BUDGET_NAME_COLUMN,
+                               delta_column=DELTA_COLUMN,
+                               budget_value_column=BUDGET_VALUE_COLUMN, budget=None, moving_average_window=None,
+                               start_date=None, end_date=None, work_on_copy=True):
     if work_on_copy:
         df = df.copy()
 
@@ -71,16 +77,16 @@ def aggregate_to_budget_deltas(df, datetime_column=DATETIME_COLUMN, category_col
 
     # If we have a budget collection with aggregated budgets (multiple categories -> single budget), aggregate
     if isinstance(budget, BudgetCollection):
-        df['budget_name'] = budget.aggregate_categories_to_budget(df[category_column], depth='child')
+        df[budget_name_column] = budget.aggregate_categories_to_budget(df[category_column], depth='child')
         budget_names = [b.name for b in budget.get_budgets()]
     else:
         raise NotImplementedError("This is not done.  I think we need to catch if dict here and do something.  "
                                   "Not sure about int")
-        df['budget_name'] = df[category_column]
-        budget_names = pd.unique(df['budget_name'])
+        df[budget_name_column] = df[category_column]
+        budget_names = pd.unique(df[budget_name_column])
 
     # Reject anything that doesn't have a mapped budget_name (because we don't care about it!)
-    df = df.dropna(subset=['budget_name'])
+    df = df.dropna(subset=[budget_name_column])
 
     # If we have no data here, we haven't selected any categories to plot.  Escape
     if len(df) == 0:
@@ -88,12 +94,12 @@ def aggregate_to_budget_deltas(df, datetime_column=DATETIME_COLUMN, category_col
         return df
 
         # Rearrange df of individual transactions into format needed
-    df_sums = df[['budget_name', datetime_column, amount_column]] \
-        .groupby(['budget_name', pd.Grouper(key=datetime_column, freq='MS')]).sum()
+    df_sums = df[[budget_name_column, datetime_column, amount_column]] \
+        .groupby([budget_name_column, pd.Grouper(key=datetime_column, freq='MS')]).sum()
 
     # Make a regular index with all category/month combinations having values.
     # Fill anything missing with 0
-    new_index = pd.MultiIndex.from_product((budget_names, date_range), names=['budget_name', datetime_column])
+    new_index = pd.MultiIndex.from_product((budget_names, date_range), names=[budget_name_column, datetime_column])
     df_sums = df_sums.reindex(new_index, fill_value=0)
 
     # Rearrange budget into format needed
@@ -101,7 +107,7 @@ def aggregate_to_budget_deltas(df, datetime_column=DATETIME_COLUMN, category_col
     if isinstance(budget, (float, int)):
         # All budget values are equal and set to the number budget
         # Build budget such that each month/category has the same budget value, and it covers all values in df_sums
-        df_budget = pd.DataFrame({'budget': [budget] * len(df_sums.index)}, index=df_sums.index)
+        df_budget = pd.DataFrame({budget_value_column: [budget] * len(df_sums.index)}, index=df_sums.index)
         # Alternatively, could make this a {category: _, budget: _} dataframe (no date) and cast to all months using
         # same code as below
     elif isinstance(budget, BudgetCollection):
@@ -109,11 +115,11 @@ def aggregate_to_budget_deltas(df, datetime_column=DATETIME_COLUMN, category_col
         name, amount = list(zip(*name_amount))
 
         # Indexed by budget_name
-        df_budget = pd.DataFrame({'budget': amount}, index=name)
+        df_budget = pd.DataFrame({budget_value_column: amount}, index=name)
 
         # Reindexed to broadcast across all dates
         # level sets the index to match to.  Others are broadcast across
-        df_budget = df_budget.reindex(df_sums.index, level='budget_name')
+        df_budget = df_budget.reindex(df_sums.index, level=budget_name_column)
 
     # NOT TESTED(?)
     # elif isinstance(budget, dict):
@@ -139,11 +145,11 @@ def aggregate_to_budget_deltas(df, datetime_column=DATETIME_COLUMN, category_col
     #     # after)
     #     budget = budget.reset_index().set_index(df_sums.index.names).reindex(df_sums.index, fill_value=0)
 
-    df_sums = pd.merge(df_sums, df_budget['budget'], left_index=True, right_index=True, how='left')
+    df_sums = pd.merge(df_sums, df_budget[budget_value_column], left_index=True, right_index=True, how='left')
 
     # For anything that has no budget, fill with 0
     # TODO: Can we get here now?  Think this might have been before some refactoring, but not now?
-    df_sums.loc[df_sums['budget'].isna(), 'budget'] = 0.0
+    df_sums.loc[df_sums[budget_value_column].isna(), budget_value_column] = 0.0
 
     # Apply moving average, if applicable
     if moving_average_window:
@@ -151,18 +157,18 @@ def aggregate_to_budget_deltas(df, datetime_column=DATETIME_COLUMN, category_col
         # by the groupby).  Maybe this could be done with a .transform instead?
         # If we don't groupby on budget_name, the rolling means bleed between each budget_name (eg, last transaction
         # of budgetA is averaged with first transaction of budgetB!)
-        df_sums = (df_sums.groupby(level="budget_name").
+        df_sums = (df_sums.groupby(level=budget_name_column).
                    rolling(moving_average_window).
                    mean().droplevel(0)
                    )
 
-    df_sums['delta'] = df_sums[amount_column] - df_sums['budget']
+    df_sums[delta_column] = df_sums[amount_column] - df_sums[budget_value_column]
 
     # Add Subtotal "category" to see everything subtotaled
-    if "delta" in df_sums.index.get_level_values("budget_name"):
+    if delta_column in df_sums.index.get_level_values(budget_name_column):
         raise ValueError("Tried to add Subtotal as budget but Subtotal already exists")
-    subtotal = df_sums.groupby(level=datetime_column)['delta'].sum()
-    subtotal = pd.concat([subtotal], keys=['Subtotal'], names=["budget_name"])
+    subtotal = df_sums.groupby(level=datetime_column)[delta_column].sum()
+    subtotal = pd.concat([subtotal], keys=[SUBTOTAL_BUDGET_NAME], names=[BUDGET_NAME_COLUMN])
     df_sums = pd.concat([df_sums, subtotal.to_frame()])
 
     return df_sums
@@ -170,7 +176,7 @@ def aggregate_to_budget_deltas(df, datetime_column=DATETIME_COLUMN, category_col
 
 def budget_heatmap(df, datetime_column=DATETIME_COLUMN, category_column=CATEGORY_COLUMN,
                    amount_column=AMOUNT_COLUMN, budget=None, moving_average_window=None, start_date=None, end_date=None,
-                   fig: go.Figure = None, annotations=True, annotation_text_size=8,
+                   fig: go.Figure = None, annotations=True, annotation_text_size=8, delta_column=DELTA_COLUMN
                    ):
     """
     TODO:
@@ -192,41 +198,32 @@ def budget_heatmap(df, datetime_column=DATETIME_COLUMN, category_column=CATEGORY
     Returns:
 
     """
-    df = df.copy()
-
     if fig is None:
         fig = go.Figure()
-
-    to_plot = aggregate_to_budget_deltas(df, datetime_column=datetime_column, category_column=category_column,
-                                         amount_column=amount_column, budget=budget, moving_average_window=moving_average_window, start_date=start_date,
-                                         end_date=end_date, work_on_copy=True)
-
-    df_sums = to_plot
 
     start_date, end_date, date_range = _parse_dates(datetime_column, df, end_date, start_date, moving_average_window)
 
     # If we have no data here, we haven't selected any categories to plot.  Escape
-    if len(df_sums) == 0:
+    if len(df) == 0:
         # no data!
         return fig
 
     # Construct plot
     zmid = 0
-    zmin, zmax = get_rounded_z_range_including_mid(df_sums['delta'], zmid, round_to=10)
+    zmin, zmax = get_rounded_z_range_including_mid(df[delta_column], zmid, round_to=10)
     colorscale = make_centered_rg_colorscale(zmin, zmax, zmid)
 
     # For plotting, reverse the order of the rows.  Rows picked on the sidebar are populated top to bottom, but y-values
     # on a heatmap show from bottom to top (increasing y direction)
-    df_sums = _reverse_index_level_order(df_sums, "budget_name")
+    df_sums = _reverse_index_level_order(df, BUDGET_NAME_COLUMN)
 
     df_sums.sort_index()
     fig.add_trace(
         go.Heatmap(
             x=df_sums.index.get_level_values(datetime_column),
-            # y=list(reversed(df_sums.index.get_level_values("budget_name"))),
-            y=df_sums.index.get_level_values("budget_name"),
-            z=df_sums['delta'],
-            text=df_sums['delta'],
+            y=df_sums.index.get_level_values(BUDGET_NAME_COLUMN),
+            z=df_sums[DELTA_COLUMN],
+            text=df_sums[DELTA_COLUMN],
             colorscale=colorscale,
             zmin=zmin,
             zmax=zmax,
@@ -236,7 +233,7 @@ def budget_heatmap(df, datetime_column=DATETIME_COLUMN, category_column=CATEGORY
     )
 
     if annotations:
-        annotations = _make_annotations(df_sums, annotation_text_size)
+        annotations = _make_annotations(df_sums, annotation_text_size, delta_column)
         fig.update_layout(
             annotations=annotations,
         )
@@ -252,7 +249,8 @@ def budget_heatmap(df, datetime_column=DATETIME_COLUMN, category_column=CATEGORY
     return fig
 
 
-def monthly_bar(df, datetime_column=DATETIME_COLUMN, y_column=AMOUNT_COLUMN, budget=None, moving_average_window=None,
+def monthly_bar(df, datetime_column=DATETIME_COLUMN, y_column=AMOUNT_COLUMN, delta_column=DELTA_COLUMN,
+                budget=None, moving_average_window=None,
                 start_date=None, end_date=None, fig=None, plot_burn_rate=False):
     """
     Returns a plotly figure of a bar chart of df[y_column], grouped monthly by df[datetime_column].
@@ -328,10 +326,10 @@ def monthly_bar(df, datetime_column=DATETIME_COLUMN, y_column=AMOUNT_COLUMN, bud
 
         if budget and len(df_ma) > 0:
             # TODO: This hovertext would make more sense in the bar rather than on just the moving average dot
-            df_ma['delta'] = df_ma[y_column] - budget
-            df_ma['overunder'] = df_ma.apply(lambda row: "under" if row.loc['delta'] > 0 else "over", axis=1)
+            df_ma[delta_column] = df_ma[y_column] - budget
+            df_ma['overunder'] = df_ma.apply(lambda row: "under" if row.loc[delta_column] > 0 else "over", axis=1)
             hovertext = df_ma.apply(
-                lambda row: f"${row.loc[y_column]:.2f} (${abs(row.loc['delta']):.2f} {row.loc['overunder']} budget)",
+                lambda row: f"${row.loc[y_column]:.2f} (${abs(row.loc[delta_column]):.2f} {row.loc['overunder']} budget)",
                 axis=1)
             hovertext = hovertext.to_list()
 
@@ -343,6 +341,8 @@ def monthly_bar(df, datetime_column=DATETIME_COLUMN, y_column=AMOUNT_COLUMN, bud
             hovertext = ""
 
         def set_color(val):
+            if budget is None:
+                return "black"
             if val > budget:
                 return "green"
             else:
@@ -382,11 +382,11 @@ def monthly_bar(df, datetime_column=DATETIME_COLUMN, y_column=AMOUNT_COLUMN, bud
     return fig
 
 
-def _make_annotations(df_sums, annotation_text_size=8):
+def _make_annotations(df_sums, annotation_text_size=8, delta_column=DELTA_COLUMN):
     annotations = []
     for (cat, datetime_), ds in df_sums.iterrows():
         kwargs = dict(
-            text=f"<b>${ds['delta']:.0f}</b>",
+            text=f"<b>${ds[delta_column]:.0f}</b>",
             x=datetime_,
             y=cat,
             **ANNOTATION_ARGS,
@@ -641,6 +641,10 @@ def update_controls(depth):
     ],
 )
 def update_heatmap(start_date, end_date, ma, sidebar_ul_children, annotation_text_size):
+    """
+    TODO: Docs
+    -   note that we persis data in WORKING_DATA_ID for the xy plot
+    """
     budgets_to_show = get_checked_sidebar_children(sidebar_ul_children)
 
     div_style = {'display': 'block'}
@@ -660,10 +664,14 @@ def update_heatmap(start_date, end_date, ma, sidebar_ul_children, annotation_tex
     else:
         annotations = False
 
-    df = get_transactions('df')
-
     # Make a subset of the overall Budget definition for only these children
     bc_subset = BUDGET_COLLECTION.slice_by_budgets(budgets_to_show)
+
+    df = get_transactions('df')
+    # Aggregate transactions to the budgets we have chosen
+    df = aggregate_to_budget_deltas(df, datetime_column=DATETIME_COLUMN, category_column=CATEGORY_COLUMN,
+                                         amount_column=AMOUNT_COLUMN, budget=bc_subset, moving_average_window=ma, start_date=start_date,
+                                         end_date=end_date, work_on_copy=False)
 
     fig = budget_heatmap(df,
                          datetime_column=DATETIME_COLUMN,
@@ -680,7 +688,7 @@ def update_heatmap(start_date, end_date, ma, sidebar_ul_children, annotation_tex
     # Update layout to match other figures in this column
     fig.update_layout(margin=SHARED_FIGURE_MARGIN)
     fig.update_yaxes(automargin=False)  # Otherwise our figures will be out of alignment
-    return (div_style, fig, df.to_json())
+    return div_style, fig, df.to_json(orient='table')
 
 
 # Sidebar callbacks
@@ -701,9 +709,12 @@ app.callback(
         Input('monthly-hist-date-range', "start_date"),
         Input('monthly-hist-date-range', "end_date"),
         Input("monthly-hist-ma-slider", "value"),
-     ]
+     ],
+    [
+        State(WORKING_DATA_ID, "children"),
+    ]
 )
-def update_barchart(clickData, start_date, end_date, moving_average_window):
+def update_barchart(clickData, start_date, end_date, moving_average_window, working_data):
     div_style = {'display': 'block'}
 
     if not clickData:
@@ -711,25 +722,35 @@ def update_barchart(clickData, start_date, end_date, moving_average_window):
         fig = invisible_figure()
         return div_style, fig
 
-
-    df = get_transactions('df').copy()
-
     # budget_name is first point clicked's (click only returns one) y attribute
     budget_name = clickData["points"][0]['y']
 
-    # Filter down to only the budget_name we care about, aggregating categories to a budget if needed
-    budget = BUDGET_COLLECTION.get_budget_by_name(budget_name)
-    df['budget_name'] = budget.aggregate_categories_to_budget(df[CATEGORY_COLUMN], depth='this')
-    df = df.loc[df['budget_name'] == budget_name]
+
+    if budget_name == SUBTOTAL_BUDGET_NAME:
+        budget_amount = None
+        plot_burn_rate = False
+        # Special case where data is not in DB
+        df = pd.read_json(working_data, orient='table')
+        df = df.reset_index()
+        df[AMOUNT_COLUMN] = df[DELTA_COLUMN]
+    else:
+        budget = BUDGET_COLLECTION.get_budget_by_name(budget_name)
+        budget_amount = budget.amount
+        plot_burn_rate = True
+        df = get_transactions('df')
+        # Filter down to only the budget_name we care about, aggregating categories to a budget if needed
+        df[BUDGET_NAME_COLUMN] = budget.aggregate_categories_to_budget(df[CATEGORY_COLUMN], depth='this')
+
+    df = df.loc[df[BUDGET_NAME_COLUMN] == budget_name]
 
     fig = monthly_bar(df,
                       datetime_column=DATETIME_COLUMN,
                       y_column=AMOUNT_COLUMN,
-                      budget=budget.amount,
+                      budget=budget_amount,
                       moving_average_window=moving_average_window,
                       start_date=start_date,
                       end_date=end_date,
-                      plot_burn_rate=True
+                      plot_burn_rate=plot_burn_rate,
                       )
 
     # Update layout to match other figures in this column

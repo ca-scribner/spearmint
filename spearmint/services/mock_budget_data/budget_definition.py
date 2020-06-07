@@ -93,9 +93,12 @@ def get_expense_bc():
     expenses_subcategory_bc_dict[name].add_budget(Budget(-225, ["Tuition"], name="Educational Expenses"))
     expenses_subcategory_bc_dict[name].add_budget(Budget(-30, ["Work Expenses", "Office Supplies"], name="Work, Home Office, Edu"))
     expenses_subcategory_bc_dict[name].add_budget(Budget(-10, ["ATM Fee", "Bank Fee", "Fees & Charges", "Finance Charge", "Late Fee", "Tickets"], name="Fees and Charges"))
-    expenses_subcategory_bc_dict[name].add_budget(Budget(-0, ["Federal Tax", "Taxes", "State Tax"], name="All Taxes"))
     expenses_subcategory_bc_dict[name].add_budget(Budget(-15, ["Passport, License .."], name="Passport, License, etc"))
     expenses_subcategory_bc_dict[name].add_budget(Budget(-15, ["Cash & ATM", "Unknown Expense"], name="Unknown - Cash, etc"))
+
+    name = "All Taxes"
+    expenses_subcategory_bc_dict[name] = BudgetCollection(name=name)
+    expenses_subcategory_bc_dict[name].add_budget(Budget(-0, ["Taxes"]))
 
     # Extra Savings
     name = "Extra Savings"

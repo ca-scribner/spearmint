@@ -219,7 +219,7 @@ def make_sidebar_ul(data, top_item, inherited_class="", child_class="", depth=np
     """
     children = make_sidebar_children(data=data,
                                      top_item=top_item,
-                                     inherited_class=inherited_class,
+                                     inherited_class=inherited_class + " sidebar-li",
                                      child_class=child_class,
                                      depth=depth
                                      )
