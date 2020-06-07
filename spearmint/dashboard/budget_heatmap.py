@@ -60,7 +60,7 @@ X_AXIS_PAD = pd.Timedelta(15, unit='D')
 
 def budget_heatmap(df, datetime_column=DATETIME_COLUMN, category_column=CATEGORY_COLUMN,
                    amount_column=AMOUNT_COLUMN, budget=None, moving_average_window=None, start_date=None, end_date=None,
-                   fig: go.Figure = None,
+                   fig: go.Figure = None, annotations=True, annotation_text_size=8,
                    ):
     """
     TODO:
@@ -78,6 +78,7 @@ def budget_heatmap(df, datetime_column=DATETIME_COLUMN, category_column=CATEGORY
         start_date:
         end_date:
         fig:
+        annotations (bool): If True, write the (amount-budget) value in each cell of the heatmap
 
     Returns:
 
@@ -185,7 +186,6 @@ def budget_heatmap(df, datetime_column=DATETIME_COLUMN, category_column=CATEGORY
     df_sums['delta'] = df_sums[amount_column] - df_sums['budget']
 
     # Construct plot
-    annotations = _make_annotations(df_sums)
     zmid = 0
     zmin, zmax = get_rounded_z_range_including_mid(df_sums['delta'], zmid, round_to=10)
     colorscale = make_centered_rg_colorscale(zmin, zmax, zmid)
@@ -195,6 +195,7 @@ def budget_heatmap(df, datetime_column=DATETIME_COLUMN, category_column=CATEGORY
             x=df_sums.index.get_level_values(datetime_column),
             y=df_sums.index.get_level_values("budget_name"),
             z=df_sums['delta'],
+            text=df_sums['delta'],
             colorscale=colorscale,
             zmin=zmin,
             zmax=zmax,
@@ -202,6 +203,12 @@ def budget_heatmap(df, datetime_column=DATETIME_COLUMN, category_column=CATEGORY
             ygap=3,
         )
     )
+
+    if annotations:
+        annotations = _make_annotations(df_sums, annotation_text_size)
+        fig.update_layout(
+            annotations=annotations,
+        )
 
     fig.update_layout(
         annotations=annotations,
@@ -345,15 +352,22 @@ def monthly_bar(df, datetime_column=DATETIME_COLUMN, y_column=AMOUNT_COLUMN, bud
     return fig
 
 
-def _make_annotations(df_sums):
+def _make_annotations(df_sums, annotation_text_size=8):
     annotations = []
-    for (datetime_, cat), ds in df_sums.iterrows():
+    for (cat, datetime_), ds in df_sums.iterrows():
+        kwargs = dict(
+            text=f"<b>${ds['delta']:.0f}</b>",
+            x=datetime_,
+            y=cat,
+            **ANNOTATION_ARGS,
+        )
+        # Add/Update annotation_text_size without clobbering existing fonts
+        kwargs['font'] = kwargs.get('font', {})
+        kwargs['font'].update({'size': annotation_text_size})
+
         annotations.append(
             go.layout.Annotation(
-                text=f"<b>${ds['delta']:.2f}</b>",
-                x=datetime_,
-                y=cat,
-                **ANNOTATION_ARGS,
+                **kwargs
             )
         )
     return annotations
@@ -429,17 +443,15 @@ def get_controls(depth):
     return html.Div(
         [
             get_date_picker(),
-            html.Hr(),
             dcc.Slider(
                 id="monthly-hist-ma-slider",
                 min=1,
                 max=12,
                 step=None,
                 marks={x: str(x) for x in MOVING_AVERAGE_SLIDER_TICKS},
-                value=3,
+                value=6,
                 className="controls-sidebar",
             ),
-            html.Hr(),
             dcc.Slider(
                 id="monthly-hist-depth-slider",
                 min=0,
@@ -449,7 +461,15 @@ def get_controls(depth):
                 value=depth,
                 className="controls-sidebar",
             ),
-            html.Hr(),
+            dcc.Slider(
+                id="annotation-size-slider",
+                min=0,
+                max=14,
+                step=2,
+                marks={x: str(x) for x in [0, 8, 10, 12, 14]},
+                value=14,
+                className="controls-sidebar",
+            ),
             html.Div(make_sidebar_ul(BUDGET_COLLECTION.categories_flat_dict,
                                      "Overall",
                                      depth=depth,
@@ -521,10 +541,11 @@ def get_app_layout():
         Input('monthly-hist-date-range', "start_date"),
         Input('monthly-hist-date-range', "end_date"),
         Input("monthly-hist-ma-slider", "value"),
-        Input("sidebar-ul", "children")
+        Input("sidebar-ul", "children"),
+        Input("annotation-size-slider", "value")
     ],
 )
-def update_heatmap(start_date, end_date, ma, sidebar_ul_children):
+def update_heatmap(start_date, end_date, ma, sidebar_ul_children, annotation_text_size):
     budgets_to_show = get_checked_sidebar_children(sidebar_ul_children)
 
     div_style = {'display': 'block'}
@@ -539,6 +560,11 @@ def update_heatmap(start_date, end_date, ma, sidebar_ul_children):
         # "show" the invisible figure by returning a style {display == block}
         return div_style, fig
 
+    if annotation_text_size > 0:
+        annotations = True
+    else:
+        annotations = False
+
     df = get_transactions('df')
 
     # Make a subset of the overall Budget definition for only these children
@@ -552,6 +578,8 @@ def update_heatmap(start_date, end_date, ma, sidebar_ul_children):
                          moving_average_window=ma,
                          start_date=start_date,
                          end_date=end_date,
+                         annotations=annotations,
+                         annotation_text_size=annotation_text_size
                          )
 
     # Update layout to match other figures in this column
