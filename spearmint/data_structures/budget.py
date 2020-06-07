@@ -360,12 +360,13 @@ class Budget:
             ret += f" | {str(self.categories)}"
         return ret
 
-    def aggregate_categories_to_budget(self, categories):
+    def aggregate_categories_to_budget(self, categories, depth=None):
         """
         Remaps a list of categories, replacing categories in this budget with budget.name and others to None
 
         Args:
             categories (list): List of string category names
+            depth (None): Ignored.  Included to be consistent with BudgetCategory API
 
         Returns:
             (list): List of elements of (this) string budget name or None
