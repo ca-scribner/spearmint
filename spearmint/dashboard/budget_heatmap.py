@@ -34,6 +34,7 @@ DELTA_COLUMN = "delta"
 SUBTOTAL_BUDGET_NAME = "Subtotal"
 
 WORKING_DATA_ID = "working-data"
+RAW_DATA_ID = "raw-data"
 
 SLIDER_TITLE_WIDTHS = {'md': 2, 'sm': 12}
 SLIDER_WIDTHS = {'md': 10, 'sm': 12}
@@ -453,7 +454,18 @@ def _reverse_index_level_order(df, level_name):
     return df.reindex(unique_names_reversed, level=level_name)
 
 
+def _date_picker_default_range(df):
+    start_date = "2019-01-01"
+    end_date = df[DATETIME_COLUMN].max()
+    return start_date, end_date
+
+
 def get_app_layout():
+    df = get_transactions('df')
+    start_date, end_date = _date_picker_default_range(df)
+
+    df = df.to_json(orient='table')
+
     return html.Div(
         children=[
             # Banner
@@ -463,7 +475,7 @@ def get_app_layout():
                         children=[
                             dbc.Col(
                                 id='controls-sidebar',
-                                children=get_controls(depth=3),
+                                children=get_controls(depth=3, start_date=start_date, end_date=end_date),
                                 lg=3, md=4, xs=6,  # Responsive widths
                             ),
                             dbc.Col(
@@ -501,38 +513,34 @@ def get_app_layout():
             ),
             html.Div(
                 id=WORKING_DATA_ID,  # JSONified pandas df holding the current data subset (to avoid duplicate work)
+                style={'display': 'none'},
+            ),
+            html.Div(
+                df,
+                id=RAW_DATA_ID,  # JSONified pandas df holding the raw data (to avoid extra db interactions)
+                style={'display': 'none'},
             )
         ]
     )
 
 
-def get_date_picker():
-    # Is there a better way to do this where I don't need a separate data access step purely for the date_picker?
-    # Wasn't sure how to make a date picker placeholder then update it later.  Maybe I can store it globally and change
-    # its properties later?
-    df = get_transactions('df')
-    start_date = "2019-01-01"
-    end_date = df[DATETIME_COLUMN].max()
-
+def get_date_picker(start_date=None, end_date=None):
     return dcc.DatePickerRange(
         id='monthly-hist-date-range',
         start_date=pd.to_datetime(start_date),
         end_date=pd.to_datetime(end_date),
-        # min_date_allowed=pd.to_datetime("2019-01-01"),
-        # max_date_allowed=pd.to_datetime("2020-01-01"),  # Could set to real data range
         display_format="YYYY-MMM-DD",
         className="controls-sidebar",
-        # style={'height': 1110},
     )
 
 
-def get_controls(depth):
+def get_controls(depth, start_date=None, end_date=None):
     return html.Div(
         dbc.Container(
             [
                 dbc.Row([
                     dbc.Col(
-                        get_date_picker(),
+                        get_date_picker(start_date=start_date, end_date=end_date),
                         style={'fontSize': 5}
                     ),
                 ]
@@ -620,10 +628,15 @@ def get_annotation_size_slider():
     Output("controls-sidebar", "children"),
     [
         Input("monthly-hist-depth-slider", "value")
+    ],
+    [
+        State(RAW_DATA_ID, "children")
     ]
 )
-def update_controls(depth):
-    return get_controls(depth=depth)
+def update_controls(depth, raw_data):
+    df = pd.read_json(raw_data, orient='table')
+    start_date, end_date = _date_picker_default_range(df)
+    return get_controls(depth=depth, start_date=start_date, end_date=end_date)
 
 
 @app.callback(
@@ -639,8 +652,11 @@ def update_controls(depth):
         Input("sidebar-ul", "children"),
         Input("annotation-size-slider", "value")
     ],
+    [
+        State(RAW_DATA_ID, "children"),
+    ]
 )
-def update_heatmap(start_date, end_date, ma, sidebar_ul_children, annotation_text_size):
+def update_heatmap(start_date, end_date, ma, sidebar_ul_children, annotation_text_size, raw_data):
     """
     TODO: Docs
     -   note that we persis data in WORKING_DATA_ID for the xy plot
@@ -667,7 +683,8 @@ def update_heatmap(start_date, end_date, ma, sidebar_ul_children, annotation_tex
     # Make a subset of the overall Budget definition for only these children
     bc_subset = BUDGET_COLLECTION.slice_by_budgets(budgets_to_show)
 
-    df = get_transactions('df')
+    df = pd.read_json(raw_data, orient='table')
+
     # Aggregate transactions to the budgets we have chosen
     df = aggregate_to_budget_deltas(df, datetime_column=DATETIME_COLUMN, category_column=CATEGORY_COLUMN,
                                          amount_column=AMOUNT_COLUMN, budget=bc_subset, moving_average_window=ma, start_date=start_date,
@@ -712,9 +729,10 @@ app.callback(
      ],
     [
         State(WORKING_DATA_ID, "children"),
+        State(RAW_DATA_ID, "children")
     ]
 )
-def update_barchart(clickData, start_date, end_date, moving_average_window, working_data):
+def update_barchart(clickData, start_date, end_date, moving_average_window, working_data, raw_data):
     div_style = {'display': 'block'}
 
     if not clickData:
@@ -737,7 +755,7 @@ def update_barchart(clickData, start_date, end_date, moving_average_window, work
         budget = BUDGET_COLLECTION.get_budget_by_name(budget_name)
         budget_amount = budget.amount
         plot_burn_rate = True
-        df = get_transactions('df')
+        df = pd.read_json(raw_data, orient="table")
         # Filter down to only the budget_name we care about, aggregating categories to a budget if needed
         df[BUDGET_NAME_COLUMN] = budget.aggregate_categories_to_budget(df[CATEGORY_COLUMN], depth='this')
 
