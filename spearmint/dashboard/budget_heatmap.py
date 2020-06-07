@@ -85,12 +85,6 @@ def budget_heatmap(df, datetime_column=DATETIME_COLUMN, category_column=CATEGORY
 
     """
     df = df.copy()
-    # Accept budget
-    # - If number apply budget to all categories evenly (currently done)
-    # - (NOT IMPLEMENTED) If mapping (ds, dict), apply budget to all categories of the mapped name.  Show only those categories (plot
-    #   nothing without a budget).  Could use the same budget-category but with it =category
-    # - If BudgetCollection, make a budget-category column with anything that should be aggregated to its corresponding
-    #   budget.  Then plot on what is mapped
 
     if fig is None:
         fig = go.Figure()
@@ -186,14 +180,25 @@ def budget_heatmap(df, datetime_column=DATETIME_COLUMN, category_column=CATEGORY
 
     df_sums['delta'] = df_sums[amount_column] - df_sums['budget']
 
+    # Add Subtotal "category" to see everything subtotaled
+    subtotal = df_sums.groupby(level=datetime_column)['delta'].sum()
+    subtotal = pd.concat([subtotal], keys=['Subtotal'], names=["budget_name"])
+    df_sums = pd.concat([df_sums, subtotal.to_frame()])
+
     # Construct plot
     zmid = 0
     zmin, zmax = get_rounded_z_range_including_mid(df_sums['delta'], zmid, round_to=10)
     colorscale = make_centered_rg_colorscale(zmin, zmax, zmid)
 
+    # For plotting, reverse the order of the rows.  Rows picked on the sidebar are populated top to bottom, but y-values
+    # on a heatmap show from bottom to top (increasing y direction)
+    df_sums = _reverse_index_level_order(df_sums, "budget_name")
+
+    df_sums.sort_index()
     fig.add_trace(
         go.Heatmap(
             x=df_sums.index.get_level_values(datetime_column),
+            # y=list(reversed(df_sums.index.get_level_values("budget_name"))),
             y=df_sums.index.get_level_values("budget_name"),
             z=df_sums['delta'],
             text=df_sums['delta'],
@@ -409,6 +414,18 @@ def _parse_dates(date_column, df, end_date, start_date, moving_average_window):
 
     date_range = pd.date_range(start=start_date_padded, end=end_date, freq='MS')
     return start_date, end_date, date_range
+
+
+def _reverse_index_level_order(df, level_name):
+    """
+    Reverses the index (row) order of a multiindexed dataframe
+
+    Gets a list of unique index values in the reversed order and then reindexes.  Not tested and likely has problems
+    if the level being reversed is broken into several groups
+    """
+    unique_names = pd.unique(df.index.get_level_values(level_name))
+    unique_names_reversed = reversed(unique_names)
+    return df.reindex(unique_names_reversed, level=level_name)
 
 
 def get_app_layout():
