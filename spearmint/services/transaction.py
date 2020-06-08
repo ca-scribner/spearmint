@@ -190,6 +190,22 @@ def transactions_to_dataframe(transactions: List[Transaction]) -> pd.DataFrame:
     return df
 
 
+def to_csv(csv_filename: str):
+    """
+    Exports transactions into a CSV file that fits the basic transaction_extractor format
+
+    Args:
+        csv_filename (str): Name of csv to generate
+
+    Returns:
+        None
+    """
+    print("\n******************************************************************************************************")
+    print("WARNING: This was loosely tested, but no round-trip testing completed.  If you need round-trip safety, test "
+          "it more")
+    print("******************************************************************************************************\n")
+    get_transactions('df').to_csv(csv_filename, index=False)
+
 # Helpers
 def _sa_obj_as_dict(sa_obj, include_category_relationships=True):
     """
@@ -266,9 +282,6 @@ def add(db_path, csv_file, csv_flavor, account_name, accept):
     add_transactions_from_dataframe(df, accept_category=accept)
 
 
-cli.add_command(add)
-
-
 def import_csv_as_df(csv_file, csv_flavor, account_name=None):
     if csv_flavor == "pc_mc":
         te = PcMcTransactionExtractor.read_csv(csv_file, account_name=account_name)
@@ -279,6 +292,25 @@ def import_csv_as_df(csv_file, csv_flavor, account_name=None):
     else:
         raise ValueError(f"Unknown csv_flavor '{csv_flavor}'")
     return te.to_dataframe(deep=True)
+
+
+@click.command()
+@click.argument("db_path")
+@click.argument("csv_file")
+def export_to_csv(db_path, csv_file):
+    """
+    Exports database to CSV.  WARNING: Not tested fully for round-trip
+
+    Args:
+        db_path (str): Path to source DB
+        csv_file (str): Filename to write db to
+    """
+    global_init(db_path)
+    to_csv(csv_file)
+
+
+cli.add_command(add)
+cli.add_command(export_to_csv)
 
 
 if __name__ == '__main__':
