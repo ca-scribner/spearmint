@@ -22,6 +22,7 @@ from spearmint.services.transaction import get_transactions, get_transactions_by
     get_unique_transaction_categories_as_string
 
 SUGGESTED_CATEGORY_PREFIX = "(S)"
+ACCEPTED_CATEGORY = "accepted"
 CATEGORY = "category"
 CATEGORY_ID_SUFFIX = " id"
 CATEGORY_ID = CATEGORY + CATEGORY_ID_SUFFIX
@@ -480,7 +481,7 @@ def _save_changes_to_db(data):
             # trx.category_id = None  # This should be redundant
         elif c[CATEGORY_ID] is None:
             # Manually entered - create new Category and attach
-            category = Category(scheme='manual', category=c[CATEGORY])
+            category = Category(scheme=ACCEPTED_CATEGORY, category=c[CATEGORY])
             trx.category = category
         else:
             # Accepted a suggestion.  Reuse this category by attaching to .category.

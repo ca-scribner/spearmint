@@ -1,7 +1,7 @@
 # Needed if running from inside ./bin
 #export PYTHONPATH=$PYTHONPATH:`pwd`../
 
-db_file="./secrets/db/db.sqlite"
+db_file="./secrets/db/db_LOADED.sqlite"
 
 rm $db_file
 
