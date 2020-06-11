@@ -6,6 +6,7 @@ DEFAULT_BUDGET_COLLECTION_NAME = "Unnamed Budget"
 
 # FUTURE: Put an ABC above Budget and BudgetCollection to enforce the commonalities in API?
 
+
 class BudgetCollection:
     """
     Collection of Budget objects
@@ -243,16 +244,6 @@ class BudgetCollection:
 
         budgets = [category_to_budget.get(c, None) for c in categories]
         return budgets
-        #
-        # # Find all the lowest budget:category mapping
-        # to_search = self.get_budgets()
-        # while to_search:
-        #     b = to_search.pop()
-        #     try:
-        #         to_search.extend(b.get_budgets())
-        #     except AttributeError:
-        #         budget_to_category[b] = b.categories
-
 
     def extend(self, bs):
         """
@@ -268,9 +259,6 @@ class BudgetCollection:
         """
         for b in bs.get_budgets():
             self.add_budget(b)
-
-    # Original code had:
-    # def add_budgets:
 
     def to_str(self, amount=True, categories=True, total=True, header=True):
         """
