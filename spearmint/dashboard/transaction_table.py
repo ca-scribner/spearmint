@@ -361,7 +361,7 @@ def get_app_layout(db_file):
 
 def categories_to_children_string(categories):
     categories = sorted(categories)
-    return f" {CHANGED_DELIMINATOR} ".join(categories)
+    return f" {CHANGED_DELIMINATOR} ".join([str(c) for c in categories])
 
 
 def get_tooltip_data(data):
@@ -397,6 +397,7 @@ def reload_button(n_clicks, data):
 def update_unbudgeted_categories_shown(data):
     accepted_categories = set(d[CATEGORY] for d in data)
     unbudgeted_categories = get_unbudgeted_categories(accepted_categories)
+    print(f"unbudgeted_categories = {unbudgeted_categories}")
     return categories_to_children_string(unbudgeted_categories)
 
 @app.callback(
