@@ -42,3 +42,23 @@ def get_overall_budget_collection():
     bc.add_budget(get_expense_budget_collection())
     bc.add_budget(get_excluded_budget_collection())
     return bc
+
+
+if __name__ == "__main__":
+    excluded = get_excluded_budget_collection()
+    expense = get_expense_budget_collection()
+    income = get_income_budget_collection()
+    overall = get_overall_budget_collection()
+
+    overall.display()
+
+    print("Income")
+    income.display()
+
+    print("Expenses")
+    expense.display()
+
+    print("Expenses by category")
+    for b in expense.budgets:
+        b.display()
+        print()
