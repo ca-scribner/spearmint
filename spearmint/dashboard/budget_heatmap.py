@@ -38,8 +38,9 @@ RAW_DATA_ID = "raw-data"
 
 SLIDER_TITLE_WIDTHS = {'md': 2, 'sm': 12}
 SLIDER_WIDTHS = {'md': 10, 'sm': 12}
+SLIDER_WIDTHS_HALVED = {'md': 5, 'sm': 6}
 
-external_stylesheets = [dbc.themes.BOOTSTRAP]
+external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css', dbc.themes.BOOTSTRAP]
 
 app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
 
@@ -475,7 +476,8 @@ def get_app_layout():
                         children=[
                             dbc.Col(
                                 id='controls-sidebar',
-                                children=get_controls(depth=3, start_date=start_date, end_date=end_date),
+                                children=get_controls(depth=2, start_date=start_date, end_date=end_date,
+                                                      show_categories=False),
                                 lg=3, md=4, xs=6,  # Responsive widths
                             ),
                             dbc.Col(
@@ -534,7 +536,7 @@ def get_date_picker(start_date=None, end_date=None):
     )
 
 
-def get_controls(depth, start_date=None, end_date=None):
+def get_controls(depth, start_date=None, end_date=None, show_categories=True):
     return html.Div(
         dbc.Container(
             [
@@ -568,7 +570,11 @@ def get_controls(depth, start_date=None, end_date=None):
                     ),
                     dbc.Col(
                         get_depth_slider(depth),
-                        **SLIDER_WIDTHS,
+                        **SLIDER_WIDTHS_HALVED,
+                    ),
+                    dbc.Col(
+                        get_show_categories_radio(show_categories),
+                        **SLIDER_WIDTHS_HALVED,  # TODO
                     ),
                 ]),
                 dbc.Row([
@@ -585,6 +591,8 @@ def get_controls(depth, start_date=None, end_date=None):
                     html.Div(make_sidebar_ul(BUDGET_COLLECTION.categories_flat_dict,
                                              "Overall",
                                              depth=depth,
+                                             budget_collection=BUDGET_COLLECTION,
+                                             show_categories=show_categories
                                              )),
                 ]),
             ],
@@ -610,9 +618,9 @@ def get_depth_slider(depth):
     return dcc.Slider(
         id="monthly-hist-depth-slider",
         min=0,
-        max=3,
+        max=2,
         step=1,
-        marks={x: str(x) for x in range(4)},
+        marks={x: str(x) for x in range(3)},
         value=depth,
         className="controls-sidebar",
     )
@@ -630,19 +638,34 @@ def get_annotation_size_slider():
     )
 
 
+def get_show_categories_radio(show_categories=True):
+    return dcc.RadioItems(
+        id="show-categories-radio",
+        options=[
+            {'label': "Show Categories", 'value': int(True)},
+            {'label': "Hide Categories", 'value': int(False)},
+        ],
+        value=int(show_categories),
+        labelStyle={'display': 'block'}
+    )
+
+
+# TODO: When I change monthly-hist-depth-slider, does this reset the date range?  I think I need to pull from state.
+#  Same with any other controls in the control panel
 @app.callback(
     Output("controls-sidebar", "children"),
     [
-        Input("monthly-hist-depth-slider", "value")
+        Input("monthly-hist-depth-slider", "value"),
+        Input("show-categories-radio", "value"),
     ],
     [
         State(RAW_DATA_ID, "children")
     ]
 )
-def update_controls(depth, raw_data):
+def update_controls(depth, show_categories, raw_data):
     df = pd.read_json(raw_data, orient='table')
     start_date, end_date = _date_picker_default_range(df)
-    return get_controls(depth=depth, start_date=start_date, end_date=end_date)
+    return get_controls(depth=depth, start_date=start_date, end_date=end_date, show_categories=show_categories)
 
 
 @app.callback(

@@ -135,7 +135,11 @@ def get_leaves_below_sidebar_obj(ul_children: dict, path_to_obj: Union[str, tupl
     if isinstance(start_obj, (tuple, list)):
         for i, child in enumerate(start_obj):
             child_type = child['type']
-            child_idname = child['props']['id']['id']
+            try:
+                child_idname = child['props']['id']['id']
+            except TypeError:
+                # This is just a text label, not an entry that will have relevance to us here
+                continue
             if child_type == 'Li':
                 lis[child_idname] = child
             elif child_type == 'Ul':
@@ -151,7 +155,8 @@ def get_leaves_below_sidebar_obj(ul_children: dict, path_to_obj: Union[str, tupl
     return to_return
 
 
-def make_sidebar_children(data, top_item, inherited_class="", child_class="", depth=np.inf):
+def make_sidebar_children(data, top_item, inherited_class="", child_class="", depth=np.inf, budget_collection=None,
+                          show_categories=True):
     """
     Recursively generate a hierarchical list defined by data, starting at top_item, using Ul and Li objects
 
@@ -160,6 +165,10 @@ def make_sidebar_children(data, top_item, inherited_class="", child_class="", de
     For each node, we generate:
         * An Li object with children=item_name
         * (If node is a middle node with additional children) a Ul object with children=[child_nodes, built recursively]
+
+    TODO: Originally written to be very general, the addition of budget_collection for category and amount printing in
+     the sidebar makes this tightly coupled with budget_collections.  Instead of interpreting the nested dict data, we
+     could get all information from the budget_collection itself instead.
 
     Args:
         data (dict): Dict of lists of relationships within the nested list.  For example:
@@ -175,6 +184,10 @@ def make_sidebar_children(data, top_item, inherited_class="", child_class="", de
         child_class (str): HTML class name to apply once per step in the list (so Item 1-1 would have it once,
                            Item 1-1-1 would have it twice, etc.).  Useful for incrementing tab behaviour
         depth (int): Maximum number of levels to recurse in the sidebar.  Default is all levels
+        budget_collection: A budget collection that defines the full budget structure.  Used to get budget amount and
+                           child categories
+        show_categories (bool): If True, the list will show the categories from any bottom node Budgets as an extra
+                                list item with className categories.
 
     Returns:
         (list): List of html elements for use as the children attribute of a html.Ul
@@ -183,11 +196,21 @@ def make_sidebar_children(data, top_item, inherited_class="", child_class="", de
     content = []
 
     for name in data[top_item]:
+        if budget_collection:
+            budget = budget_collection.get_budget_by_name(name)
+            amount = budget.amount
+            categories = budget.categories
+        else:
+            amount = ""
+            categories = []
+
         content.append(html.Li(
-            children=name,
+            children=f"{name} ({amount})",
             id=generate_checklist_li_id(name),
             className=this_className,
         ))
+
+        show_this_categories = False
 
         if depth > 0:
             if name in data:
@@ -195,17 +218,33 @@ def make_sidebar_children(data, top_item, inherited_class="", child_class="", de
                                                         name,
                                                         inherited_class=this_className,
                                                         child_class=child_class,
-                                                        depth=depth-1
+                                                        depth=depth-1,
+                                                        budget_collection=budget_collection,
+                                                        show_categories=show_categories
                                                         )
                 content.append(html.Ul(
                     id=generate_checklist_ul_id(name),
                     children=nested_children,
                 ))
+            else:
+                show_this_categories = True
+        else:
+            show_this_categories = True
+
+        # If we are at full depth or there are no budgets below us, and this budget has more than one category, add an
+        # unclickable Li with all the categories in this budget
+        if show_categories and show_this_categories and len(budget.categories) > 1:
+            content.append(html.Li(
+                children=str(categories),
+                id=name + "_categories",
+                className=this_className + " categories"
+            ))
 
     return content
 
 
-def make_sidebar_ul(data, top_item, inherited_class="", child_class="", depth=np.inf):
+def make_sidebar_ul(data, top_item, inherited_class="", child_class="", depth=np.inf, budget_collection=None,
+                    show_categories=True):
     """
     Returns a sidebar defined using a html.Ul with nested Li and Ul elements
 
@@ -221,7 +260,9 @@ def make_sidebar_ul(data, top_item, inherited_class="", child_class="", depth=np
                                      top_item=top_item,
                                      inherited_class=inherited_class + " sidebar-li",
                                      child_class=child_class,
-                                     depth=depth
+                                     depth=depth,
+                                     budget_collection=budget_collection,
+                                     show_categories=show_categories,
                                      )
 
     ul = html.Ul(id="sidebar-ul",
