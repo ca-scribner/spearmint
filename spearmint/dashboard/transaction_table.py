@@ -102,7 +102,7 @@ SUGGESTED_COLUMNS_TO_SHOW = flatten([get_suggested_column_names(spec=spec)
 SUGGESTED_COLUMNS_TO_WATCH_FOR_ON_CLICK = flatten([get_suggested_column_names(spec=spec)
                                                    for spec in SUGGESTED_COLUMN_SPECS])
 
-COLUMNS_TO_SHOW_FROM_DATA = ['id', 'datetime', 'amount', CATEGORY, CATEGORY_ID, 'description'] + \
+COLUMNS_TO_SHOW_FROM_DATA = ['id', 'datetime', 'amount', CATEGORY, CATEGORY_ID, 'description', 'account_name'] + \
                             SUGGESTED_COLUMNS_TO_SHOW
 
 ADDITIONAL_COLUMNS_TO_SHOW = []
@@ -146,8 +146,8 @@ def load_data(suggested_columns=tuple()):
     trxs = get_transactions()
 
     def trx_to_dict(trx: Transaction):
-        # TODO: Sync these with globals above for shown columns
-        d = {k: getattr(trx, k) for k in ['id', 'datetime', 'amount', 'description']}
+        # TODO: Sync these with globals above for shown columns.  Or, just always populate everything
+        d = {k: getattr(trx, k) for k in ['id', 'datetime', 'amount', 'description', 'account_name']}
         d[CATEGORY_ID] = trx.category_id
         if d[CATEGORY_ID]:
             d[CATEGORY] = trx.category.category

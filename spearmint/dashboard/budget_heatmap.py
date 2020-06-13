@@ -40,7 +40,7 @@ SLIDER_TITLE_WIDTHS = {'md': 2, 'sm': 12}
 SLIDER_WIDTHS = {'md': 10, 'sm': 12}
 SLIDER_WIDTHS_HALVED = {'md': 5, 'sm': 6}
 
-external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css', dbc.themes.BOOTSTRAP]
+external_stylesheets = [dbc.themes.BOOTSTRAP]
 
 app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
 

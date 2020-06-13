@@ -1,7 +1,7 @@
 from typing import List
 import pandas as pd
 import click
-from sqlalchemy import inspect, distinct
+from sqlalchemy import inspect
 from sqlalchemy.orm import joinedload
 
 from spearmint.data.category import Category
